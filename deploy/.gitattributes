@@ -1,0 +1,4 @@
+mem-backup text eol=lf
+*.sh text eol=lf
+replicate-archive text eol=lf
+hindsight-llm text eol=lf

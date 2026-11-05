@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# mem-backup: nightly age-encrypted copy of the memory volumes (replaces the unencrypted tar|zstd script).
+#   mem-backup               stop hindsight+openviking, write <volume>-<UTC stamp>.tar.zst.age for each volume, restart, prune
+#   mem-backup --dry-run     print what would run; changes nothing
+#   mem-backup --verify FILE check that FILE starts with an age header (the server cannot decrypt: it has no private key)
+# Fails closed: without a valid recipients file (public keys only, mode 0600) or without age/zstd/docker it exits 3
+# BEFORE stopping anything and writes nothing. Each output is written as *.part and renamed only when the whole
+# tar | zstd | age pipeline succeeded, so a truncated file never looks complete. Old unencrypted *.tar.zst files are never touched.
+# Environment overrides (tests and non-default layouts): MEM_BACKUP_DIR, MEM_BACKUP_RECIPIENTS, MEM_BACKUP_COMPOSE_DIR,
+# MEM_BACKUP_AGE, MEM_BACKUP_ZSTD, MEM_BACKUP_DOCKER, MEM_BACKUP_IMG, MEM_BACKUP_CAMMUT_CTR, MEM_BACKUP_SKIP_MODE_CHECK (filesystems without POSIX modes).
+# The Cammut volume is never tarred live: `cammut admin db-snapshot` (VACUUM INTO, consistent under WAL) writes /data/snapshots/cammut-<stamp>.db
+# inside the running container and only snapshots/ goes into the archive. The raw archive directory is already ciphertext and is replicated
+# offsite (deploy/replicate-archive); ARCHIVE_MODE=tar adds archive/ to this backup as a second same-host copy.
+set -Eeuo pipefail
+umask 077
+
+COMPOSE_DIR=${MEM_BACKUP_COMPOSE_DIR:-/opt/shared-memory/deployment}
+D=${MEM_BACKUP_DIR:-/var/backups/memory}
+RECIP=${MEM_BACKUP_RECIPIENTS:-/root/private/backup-recipients.txt}
+AGE=${MEM_BACKUP_AGE:-age}
+ZSTD=${MEM_BACKUP_ZSTD:-zstd}
+DOCKER=${MEM_BACKUP_DOCKER:-docker}
+C="$DOCKER compose --env-file /root/private/shared-memory.env -f compose.yaml -f compose.4gb.yaml"
+SERVICES="hindsight openviking"
+# the Cammut volume is named by its compose project (cammut_cammut-data)
+CAMMUT_VOL=cammut_cammut-data
+VOLS="hindsight-data openviking-data $CAMMUT_VOL"
+CAMMUT_CTR=${MEM_BACKUP_CAMMUT_CTR:-cammut-cammut-1}
+KEEP_DAYS=14
+
+verify() {
+  local f=$1
+  [ -s "$f" ] && head -c 20 -- "$f" | grep -aq 'age-encryption.org' || { echo "not an age file: $f" >&2; return 1; }
+  echo "age header ok: $(basename "$f") ($(stat -c %s "$f") bytes)"
+}
+
+# One age1... public key per line (comments and blank lines allowed). Never prints a line of the file.
+check_recipients() {
+  [ -f "$RECIP" ] || { echo "recipients file missing: $RECIP" >&2; return 1; }
+  if [ -z "${MEM_BACKUP_SKIP_MODE_CHECK:-}" ]; then
+    case $(stat -c %a "$RECIP") in 600|400) ;; *) echo "recipients file must have mode 0600: $RECIP" >&2; return 1 ;; esac
+  fi
+  local n=0 ln=0 line
+  while IFS= read -r line || [ -n "$line" ]; do
+    ln=$((ln + 1))
+    line=${line%$'\r'}
+    case $line in '' | '#'*) continue ;; esac
+    if [[ $line =~ ^age1(pq1)?[02-9ac-hj-np-z]{58,}$ ]]; then n=$((n + 1)); else echo "recipients file line $ln is not an age1... public key (content not shown)" >&2; return 1; fi
+  done < "$RECIP"
+  [ "$n" -ge 1 ] || { echo "recipients file has no keys: $RECIP" >&2; return 1; }
+}
+
+mode=run
+case ${1:-} in
+  --dry-run) mode=dry ;;
+  --verify) if verify "${2:?usage: mem-backup --verify FILE}"; then exit 0; else exit 1; fi ;;
+  '') ;;
+  *) echo "usage: mem-backup [--dry-run | --verify FILE]" >&2; exit 2 ;;
+esac
+
+stamp=$(date -u +%Y%m%dT%H%M%SZ)
+SNAP="/data/snapshots/cammut-$stamp.db"
+# what goes into the tar of a volume (unquoted on purpose: a word list)
+paths_of() { if [ "$1" != "$CAMMUT_VOL" ]; then echo .; elif [ "${ARCHIVE_MODE:-}" = tar ]; then echo "snapshots archive"; else echo snapshots; fi; }
+
+if [ "$mode" = dry ]; then
+  state=MISSING; [ -f "$RECIP" ] && state=present
+  echo "recipients file: $RECIP (required) [$state]"
+  echo "+ cd $COMPOSE_DIR"
+  echo "+ $C stop $SERVICES"
+  echo "+ $DOCKER exec $CAMMUT_CTR /cammut admin db-snapshot -out $SNAP -keep 3   (before the $CAMMUT_VOL copy; the live database is not tarred)"
+  for v in $VOLS; do
+    echo "+ $DOCKER run --rm -u 0 -v $v:/v:ro --entrypoint tar <hindsight image> -cp -C /v $(paths_of "$v") | $ZSTD -T2 -10 -q | $AGE -R $RECIP -o $D/$v-$stamp.tar.zst.age.part && mv $D/$v-$stamp.tar.zst.age.part $D/$v-$stamp.tar.zst.age"
+  done
+  echo "+ $C start $SERVICES   (always, also after a failure)"
+  echo "+ find $D -maxdepth 1 -name '*.tar.zst.age' -mtime +$KEEP_DAYS -delete   (only when every volume succeeded)"
+  exit 0
+fi
+
+check_recipients || exit 3
+for t in "$AGE" "$ZSTD" "$DOCKER"; do command -v "$t" > /dev/null || { echo "missing tool: $t" >&2; exit 3; }; done
+mkdir -p "$D"
+cd "$COMPOSE_DIR"
+IMG=${MEM_BACKUP_IMG:-$($DOCKER inspect -f '{{.Config.Image}}' "$($C ps -a -q hindsight | head -n1)")}
+[ -n "$IMG" ] || { echo "cannot determine the hindsight image" >&2; exit 3; }
+# ponytail: cron runs this once a night; flock only where it exists
+if command -v flock > /dev/null; then exec 9> "$D/.mem-backup.lock"; flock -n 9 || { echo "another mem-backup is running" >&2; exit 4; }; fi
+find "$D" -maxdepth 1 -name '*.part' -delete   # leftovers of a killed run; they never match *.age
+
+restart() { $C start $SERVICES || echo "WARNING: could not restart: $SERVICES" >&2; }
+trap restart EXIT
+$C stop $SERVICES
+
+fail=0
+made=""
+for v in $VOLS; do
+  out="$D/$v-$stamp.tar.zst.age"
+  if [ "$v" = "$CAMMUT_VOL" ] && ! "$DOCKER" exec "$CAMMUT_CTR" /cammut admin db-snapshot -out "$SNAP" -keep 3 > /dev/null; then
+    echo "FAILED: db-snapshot in $CAMMUT_CTR (nothing written for $v)" >&2
+    fail=1
+    continue
+  fi
+  # shellcheck disable=SC2046
+  if ( "$DOCKER" run --rm -u 0 -v "$v":/v:ro --entrypoint tar "$IMG" -cp -C /v $(paths_of "$v") | "$ZSTD" -T2 -10 -q | "$AGE" -R "$RECIP" -o "$out.part" ) && [ -s "$out.part" ]; then
+    mv -f "$out.part" "$out"
+    made="$made $out"
+  else
+    rm -f "$out.part"
+    echo "FAILED: $v (nothing written for it)" >&2
+    fail=1
+  fi
+done
+
+if [ "$fail" -eq 0 ]; then
+  find "$D" -maxdepth 1 -name '*.tar.zst.age' -mtime +"$KEEP_DAYS" -delete
+else
+  echo "pruning skipped because a volume failed" >&2
+fi
+for f in $made; do echo "$(stat -c %s "$f") bytes  $f"; done
+exit "$fail"

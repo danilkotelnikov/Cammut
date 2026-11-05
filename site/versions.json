@@ -1,0 +1,47 @@
+{
+  "latest": "0.4.0",
+  "downloads": [],
+  "versions": [
+    {
+      "version": "0.4.0",
+      "date": "2026-10-18",
+      "notes": [
+        "Memory: note store with full-text recall and optional vector recall, a deterministic project brief, REST under /v1/memory/* and an in-process memory MCP upstream (profile direct:memory).",
+        "Adapters for Claude Code, Codex CLI and Warp (project brief at session start, recall on prompt, handoff on stop).",
+        "Console pages for memory (notes, brief, retract) and agent setup (mints tokens with the right scopes).",
+        "Hardening: idempotent Hindsight retain, recall-side redaction, spool items that fail are parked instead of stopping capture, free-space check fails closed."
+      ]
+    },
+    {
+      "version": "0.3.0",
+      "date": "2026-10-16",
+      "notes": [
+        "Encrypted raw archive: transcripts stored as age ciphertext; the server holds no decryption key and no decrypt code.",
+        "Retention sweeper that removes a local transcript only after proving the same bytes are archived, replicated offsite and recoverable.",
+        "Consistent database snapshots (admin db-snapshot) used by the nightly backup."
+      ]
+    },
+    {
+      "version": "0.2.0",
+      "date": "2026-10-10",
+      "notes": [
+        "Console at /console/: password plus authenticator code login, optional GitHub sign-in, token and upstream management, audit view.",
+        "Vault key for stored secrets (admin vault-init). Without it the gateway still runs and the console stays off."
+      ]
+    },
+    {
+      "version": "0.1.2",
+      "date": "2026-10-10",
+      "notes": [
+        "Public HTTPS behind a reverse proxy, token scope editing (token scopes), GitHub MCP as a third upstream."
+      ]
+    },
+    {
+      "version": "0.1.1",
+      "date": "2026-10-10",
+      "notes": [
+        "Review pass: bounded audit rows, one POST is one JSON-RPC message, upstream redirects never followed, bearer attached only to the upstream's own host, response bodies capped at 8 MiB, stale tool lists served while one refresh runs."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+name: cammut
+services:
+  cammut:
+    build: ..
+    image: cammut:0.4.0
+    network_mode: host            # reaches Hindsight/OpenViking on the server loopback; listens on loopback only
+    restart: unless-stopped
+    command:
+      - serve
+      - -listen
+      - 127.0.0.1:7421              # gateway, plus the console API for Caddy (login stays off until real client IPs flow)
+      - -admin-listen
+      - 127.0.0.1:7422              # private console, reach it through the SSH tunnel
+      - -site-origin
+      - ${CAMMUT_SITE_ORIGIN:?set CAMMUT_SITE_ORIGIN to the public origin, e.g. https://cammut.example}   # set in the shell or in deploy/.env; never in the code
+      - -archive-dir
+      - /data/archive                 # age ciphertext segments of the raw archive (0.3.0); the volume is the only writable place
+    env_file: /root/private/cammut.env
+    volumes:
+      - cammut-data:/data
+      - /root/private/cammut-vault.key:/etc/cammut/vault.key:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 256m
+    memswap_limit: 256m
+    cpus: 1.0
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+volumes:
+  cammut-data: {}

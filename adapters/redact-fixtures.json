@@ -1,0 +1,36 @@
+{
+  "_comment": "Shared by the JavaScript redactor (adapters/common.mjs) and the Go redactor (internal/memory/redact.go). Every case must come out containing mustContain and none of mustNotContain; every prose line must come out byte-identical. Add a line here before changing either redactor.",
+  "cases": [
+    { "in": "token cmt_a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", "mustNotContain": ["cmt_a1a1a1a1"], "mustContain": "[REDACTED" },
+    { "in": "key sk-Ab3dE5gH7jK9mN1pQ3rS5tU7", "mustNotContain": ["Ab3dE5gH7jK9mN1pQ3rS5tU7"], "mustContain": "[REDACTED" },
+    { "in": "pat ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4", "mustNotContain": ["A1b2C3d4E5f6G7h8I9j0K1l2M3n4"], "mustContain": "[REDACTED" },
+    { "in": "pat github_pat_11ABCDEFG0abcdefghijkl_mnopqrstuvwxyz0123456789", "mustNotContain": ["11ABCDEFG0abcdefghijkl"], "mustContain": "[REDACTED" },
+    { "in": "aws AKIAIOSFODNN7EXAMPLE", "mustNotContain": ["IOSFODNN7"], "mustContain": "[REDACTED" },
+    { "in": "slack xoxb-1234567890-abcdefghijkl", "mustNotContain": ["1234567890-abcdefghijkl"], "mustContain": "[REDACTED" },
+    { "in": "gcp AIzaSyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q", "mustNotContain": ["SyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q"], "mustContain": "[REDACTED" },
+    { "in": "Authorization: Bearer abcdefghijklmnop1234567890", "mustNotContain": ["abcdefghijklmnop1234567890"], "mustContain": "[REDACTED" },
+    { "in": "password: hunter2hunter2", "mustNotContain": ["hunter2hunter2"], "mustContain": "[REDACTED" },
+    { "in": "API_KEY=zxcvbnm12345", "mustNotContain": ["zxcvbnm12345"], "mustContain": "[REDACTED" },
+    { "in": "curl --password s3cr3tpass https://x", "mustNotContain": ["s3cr3tpass"], "mustContain": "[REDACTED" },
+    { "in": "url https://admin:pa55w0rdpa55@host.example/path", "mustNotContain": ["pa55w0rdpa55"], "mustContain": "[REDACTED" },
+    { "in": "jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c", "mustNotContain": ["SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"], "mustContain": "[REDACTED" },
+    { "in": "пароль: Секрет12345", "mustNotContain": ["Секрет12345"], "mustContain": "[REDACTED" },
+    { "in": "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----END OPENSSH PRIVATE KEY-----", "mustNotContain": ["b3BlbnNzaC1r"], "mustContain": "[REDACTED" },
+    { "in": "hex ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12", "mustNotContain": ["ab12ab12ab12ab12"], "mustContain": "[REDACTED" },
+    { "in": "opaque yFosevcX9vc1thr2XS9j866KmXbt4Qq7Zk", "mustNotContain": ["yFosevcX9vc1"], "mustContain": "[REDACTED" },
+    { "in": "Мой пароль это Gr8Pass99x, не показывай", "mustNotContain": ["Gr8Pass99x"], "mustContain": "[REDACTED" },
+    { "in": "DATABASE_URL=postgres://app:Sup3rS3cretPw@db.internal:5432/app", "mustNotContain": ["Sup3rS3cretPw"], "mustContain": "[REDACTED" },
+    { "in": "run tool --api-key=xyz789 --verbose", "mustNotContain": ["xyz789"], "mustContain": "[REDACTED" },
+    { "in": "sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 of the empty file", "mustNotContain": ["e3b0c44298fc1c14"], "mustContain": "[REDACTED" },
+    { "in": "config: password = \"correct-horse9\" # double-quoted form", "mustNotContain": ["correct-horse9"], "mustContain": "[REDACTED" },
+    { "in": "config: secret: 'topsecret77' # single-quoted form", "mustNotContain": ["topsecret77"], "mustContain": "[REDACTED" },
+    { "in": "export SECRET_TOKEN=abcd1234efgh", "mustNotContain": ["abcd1234efgh"], "mustContain": "[REDACTED" },
+    { "in": "the password is swordfish99 for staging", "mustNotContain": ["swordfish99"], "mustContain": "[REDACTED" }
+  ],
+  "prose": [
+    "Fixed the 429 in commit 1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b on branch console-0.2.0; secrets never go in chat, see /opt/cammut/deploy and https://cammut.example/mcp.",
+    "The short commit 1a2b3c4d5e6f fixed it; run go test ./internal/memory and read internal/memory/redact.go.",
+    "Мы решили использовать FTS5 для поиска по заметкам проекта и хранить заметки без секретов.",
+    "Passwords are never stored in notes; the token lives in the vault, not in the repository."
+  ]
+}

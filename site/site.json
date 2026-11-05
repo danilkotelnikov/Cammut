@@ -1,0 +1,6 @@
+{
+  "tagline_short": "MCP",
+  "description": "Cammut is a self-hosted MCP gateway with agent memory: register your MCP servers once, give each agent a scoped token, reach everything through one endpoint.",
+  "endpoint_placeholder": "https://cammut.example.org/mcp",
+  "measured": "Measured on a 4-vCPU VPS, release 0.1 (2026-10-10)"
+}

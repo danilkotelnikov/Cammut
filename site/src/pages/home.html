@@ -1,0 +1,83 @@
+<section class="wrap hero">
+<p class="kicker">Self-hosted MCP gateway · v{{latest}}</p>
+<h1>One endpoint.<br>Every agent.<br>Your server.</h1>
+<p class="lead">Register your MCP servers once. Give each agent its own scoped token. Cammut serves all of it through a single <code>/mcp</code> endpoint, and remembers your projects between sessions.</p>
+<div class="row">
+<a class="btn solid" href="/setup/">Setup guide</a>
+<a class="btn" href="/docs/">Read the docs</a>
+<a class="btn" href="/download/">Download</a>
+</div>
+</section>
+<div class="band" role="presentation"></div>
+
+<section class="section">
+<div class="wrap">
+<h2>Four tools. Not four hundred.</h2>
+<p>An agent connected to ten MCP servers normally loads every tool schema of every server into its context. Cammut's default <em>lazy</em> profile exposes just four tools. The agent finds what it needs, reads one schema, and calls it.</p>
+<div class="grid">
+<div class="cell"><span class="idx">01</span><h3>cammut_servers</h3><p>Which upstream servers can this token see, and are they reachable.</p></div>
+<div class="cell"><span class="idx">02</span><h3>cammut_search</h3><p>Find tools across every upstream by keyword. Stale lists are served instantly while one background refresh runs.</p></div>
+<div class="cell"><span class="idx">03</span><h3>cammut_describe</h3><p>Fetch the full schema of one tool, only when the agent is about to use it.</p></div>
+<div class="cell"><span class="idx">04</span><h3>cammut_call</h3><p>Call the tool. The token's scopes, the rate limit and the audit log apply to every call.</p></div>
+</div>
+<p>Prefer native tool lists for one agent? A token with the <code>direct:UPSTREAM</code> profile lists that upstream's tools directly.</p>
+</div>
+</section>
+
+<section class="section inv">
+<div class="wrap">
+<h2>Small on purpose</h2>
+<div class="grid">
+<div class="cell"><span class="num">13 MB</span><p>static Go binary (image 24.9 MB)</p></div>
+<div class="cell"><span class="num">17 MB</span><p>idle memory (RSS), 18 MB after 200 searches</p></div>
+<div class="cell"><span class="num">~32 ms</span><p><code>cammut_search</code> including auth and the audit write</p></div>
+<div class="cell"><span class="num">1 file</span><p>SQLite database. No Redis, no queue, no cluster.</p></div>
+</div>
+<p class="dim">{{measured}}. Later releases add features, not a runtime: the Go gate and the test suite run on every change.</p>
+</div>
+</section>
+
+<section class="section">
+<div class="wrap">
+<h2>What you get in {{latest}}</h2>
+<div class="grid">
+<div class="cell"><h3>Scoped tokens</h3><p>One token per agent. Scopes name the upstream and tool (<code>github/*</code>, <code>hindsight/recall</code>). Revoke one without touching the rest. Only the hash is stored.</p></div>
+<div class="cell"><h3>Console</h3><p>Password plus authenticator code, optional GitHub sign-in. Manage tokens and upstreams, read the audit log, write and retract memory notes.</p></div>
+<div class="cell"><h3>Agent memory</h3><p>Notes, a deterministic project brief at session start, recall on every prompt, and a handoff between agents. Adapters for Claude Code, Codex CLI and Warp.</p></div>
+<div class="cell"><h3>Encrypted archive</h3><p>Full transcripts stored as <code>age</code> ciphertext. The server cannot decrypt them: it has no key and no decrypt code.</p></div>
+<div class="cell"><h3>Fails open</h3><p>If Cammut or the network is down, hooks log one line and your agent keeps working. Nothing is deleted until it is proven archived.</p></div>
+<div class="cell"><h3>Optional vectors</h3><p>Recall is full-text by default. Point it at a text-embeddings-inference server and notes get vector recall as well.</p></div>
+</div>
+</div>
+</section>
+
+<section class="section inv">
+<div class="wrap">
+<h2>Cammut or a hosted platform?</h2>
+<div class="grid">
+<div class="cell"><h3>Pick Cammut if</h3><ul>
+<li>you run your own MCP servers, or use remote ones with a bearer token;</li>
+<li>you want agents, memory and transcripts to stay on a machine you control;</li>
+<li>one operator, a few agents, a small VPS.</li></ul></div>
+<div class="cell"><h3>Pick a hosted platform if</h3><ul>
+<li>you want a large managed catalogue of app integrations;</li>
+<li>you want someone else to run OAuth flows for third-party apps;</li>
+<li>you need multi-user administration at team scale.</li></ul></div>
+</div>
+<p>Cammut does not try to be a catalogue. It is the part in the middle: one door, your keys, an audit trail, and memory that follows you from one agent to the next.</p>
+</div>
+</section>
+
+<section class="section">
+<div class="wrap">
+<h2>Honest limits</h2>
+<ul>
+<li>Built for <strong>one operator</strong>. Token scopes have no per-project dimension yet.</li>
+<li>HTTP upstreams only; stdio servers are on the roadmap.</li>
+<li><code>cammut_search</code> matches English tool descriptions; multilingual search is planned.</li>
+<li>No managed OAuth for third-party apps.</li>
+</ul>
+<p>The full list, with what is verified and what is not, is on the <a href="/docs/limits/">limits page</a>.</p>
+<div class="row"><a class="btn solid" href="/setup/">Connect your first agent</a></div>
+</div>
+</section>

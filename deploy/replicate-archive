@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# replicate-archive REMOTE:PATH — copy the encrypted archive offsite and RECORD which segments were verified there.
+#   1. rclone copy <archive dir> REMOTE:PATH --immutable --transfers 2     (ciphertext only; it is already age-encrypted)
+#   2. rclone check <archive dir> REMOTE:PATH --one-way --download --combined -
+#      reads BOTH sides, so it works for every backend, including those that expose no sha256. A line "= <path>" names a
+#      segment whose remote bytes were just downloaded and compared with the local ciphertext.
+#   3. manifest {"items":[{"id","sha256"}]} for those segments only (id = file name without .age, sha256 of the local file)
+#   4. docker exec -i cammut-cammut-1 /cammut archive replica-record -remote NAME < manifest   (NAME = the part before ':')
+#      The server records a replica row only when the id exists and the sha equals the stored ciphertext sha; there is no HTTP route
+#      and no token on the PC that can claim a replica. The manifest is the whole verified set of this remote: the server REPLACES
+#      the remote's earlier claims with it, so a segment that failed today's complete check stops counting as replicated.
+# Exit 0: every segment is verified offsite. Exit 1: some are not (printed as unreplicated=N); the run is still recorded.
+# Exit 3: the check did not cover every local segment (remote unreachable, rclone failed): NOTHING is recorded, so a failed run
+# can never make the replica look fresh. Exit 2: usage. Only counts, ids and hashes are printed; no remote credential, ever.
+# Overrides (tests and non-default layouts): REPL_ARCHIVE_DIR, REPL_RCLONE, REPL_DOCKER, REPL_CONTAINER.
+set -Eeuo pipefail
+umask 077
+
+REMOTE=${1:-}
+[ -n "$REMOTE" ] && [[ $REMOTE == *:* ]] || { echo "usage: replicate-archive REMOTE:PATH   (an rclone remote you own, e.g. mega:cammut-archive)" >&2; exit 2; }
+DIR=${REPL_ARCHIVE_DIR:-/var/lib/docker/volumes/cammut_cammut-data/_data/archive}
+RCLONE=${REPL_RCLONE:-rclone}
+DOCKER=${REPL_DOCKER:-docker}
+CTR=${REPL_CONTAINER:-cammut-cammut-1}
+NAME=${REMOTE%%:*}
+[[ $NAME =~ ^[A-Za-z0-9._-]{1,60}$ ]] || { echo "remote name '$NAME' is not usable" >&2; exit 2; }
+[ -d "$DIR" ] || { echo "archive directory not found: $DIR" >&2; exit 2; }
+for t in "$RCLONE" "$DOCKER" sha256sum; do command -v "$t" > /dev/null || { echo "missing tool: $t" >&2; exit 2; }; done
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+# every local segment (never the *.tmp files of an upload in progress)
+find "$DIR" -type f -name '*.age' -printf '%P\n' | LC_ALL=C sort > "$work/local.txt"
+total=$(wc -l < "$work/local.txt")
+
+if ! "$RCLONE" copy "$DIR" "$REMOTE" --immutable --transfers 2 --include '*.age' > /dev/null 2> "$work/copy.err"; then
+  echo "rclone copy reported errors (the check below decides what counts)" >&2
+fi
+# rclone check exits non-zero when it finds differences, so its status is not used; completeness of its listing is
+"$RCLONE" check "$DIR" "$REMOTE" --one-way --download --include '*.age' --combined - > "$work/combined.txt" 2> "$work/check.err" || true
+
+# a line for every local segment, in any state, or the check did not cover the archive
+awk '{ sub(/^[=+*!-] /, ""); print }' "$work/combined.txt" | LC_ALL=C sort -u > "$work/seen.txt"
+if [ "$total" -gt 0 ] && [ -n "$(LC_ALL=C comm -23 "$work/local.txt" "$work/seen.txt" | head -n1)" ]; then
+  echo "the offsite check did not cover every local segment (remote unreachable or rclone failed); nothing was recorded" >&2
+  echo "verified=0 unreplicated=$total"
+  exit 3
+fi
+
+# "= xx/<32 hex>.age" is a byte-for-byte match of the local and the downloaded remote file
+{
+  printf '{"items":['
+  first=1
+  while IFS= read -r rel; do
+    [[ $rel =~ ^[0-9a-f]{2}/([0-9a-f]{32})\.age$ ]] || continue
+    id=${BASH_REMATCH[1]}
+    sum=$(sha256sum -- "$DIR/$rel" | cut -d' ' -f1)
+    [[ $sum =~ ^[0-9a-f]{64}$ ]] || continue
+    [ "$first" -eq 1 ] || printf ','
+    first=0
+    printf '{"id":"%s","sha256":"%s"}' "$id" "$sum"
+  done < <(sed -n 's/^= //p' "$work/combined.txt" | LC_ALL=C sort -u)
+  printf ']}\n'
+} > "$work/manifest.json"
+verified=$(grep -o '"id"' "$work/manifest.json" | wc -l || true)
+
+"$DOCKER" exec -i "$CTR" /cammut archive replica-record -remote "$NAME" < "$work/manifest.json" || { echo "recording the replica failed" >&2; exit 3; }
+
+unreplicated=$((total - verified))
+echo "verified=$verified unreplicated=$unreplicated remote=$NAME"
+[ "$unreplicated" -eq 0 ]

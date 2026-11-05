@@ -1,0 +1,14 @@
+*.db
+*.db-shm
+*.db-wal
+.superpowers/
+/cammut
+go.mod.new
+go.sum.new
+.remote-cmd
+
+internal/web/dist/*
+!internal/web/dist/.gitkeep
+web/node_modules/
+site/node_modules/
+site/dist/

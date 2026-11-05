@@ -1,0 +1,19 @@
+<div class="wrap prose">
+<p class="kicker">Latest: {{latest}}</p>
+<h1>Download</h1>
+<p>Cammut is a single static Go binary plus a web console, shipped as a container image. Every release lists its SHA-256 here.</p>
+
+<h2>Files</h2>
+{{downloads}}
+
+<h2>Verify a download</h2>
+<figure class="code"><figcaption><span>bash</span><button type="button" class="copy" data-copy>COPY</button></figcaption><pre><code>sha256sum -c cammut-SHA256SUMS      # Linux
+Get-FileHash .\cammut-{{latest}}-linux-amd64 -Algorithm SHA256   # PowerShell</code></pre></figure>
+<p>Compare the output with the checksum in the table. If they differ, do not run the file.</p>
+
+<h2>Run it</h2>
+<p>The <a href="/docs/quickstart/">quickstart</a> goes from a fresh server to a connected agent in about ten minutes. It needs Docker and, for public HTTPS, a reverse proxy such as Caddy.</p>
+
+<h2>Changelog</h2>
+{{changelog}}
+</div>

@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "identity": ["project_id", "workspace_id", "agent", "session_id", "source_revision"],
+  "capture_states": ["local_queued", "server_durable", "processing", "completed", "failed"],
+  "checkpoint_fields": ["goal", "decisions", "open_tasks", "next_actions", "artifact_refs", "validation", "source_revision"],
+  "delivery_states": ["served", "emitted", "confirmed"],
+  "scenarios": [
+    {
+      "name": "same basename is not a project identity",
+      "sources": ["C:/work/alpha/Cammut", "D:/work/beta/Cammut"],
+      "expect": "different project_id unless explicitly mapped"
+    },
+    {
+      "name": "parallel worktrees do not supersede each other",
+      "sources": ["C:/work/Cammut", "C:/work/Cammut-feature"],
+      "expect": "separate workspace_id and independently restorable checkpoints"
+    },
+    {
+      "name": "async acceptance is not completion",
+      "source": "synthetic Hindsight operation accepted without a completed status",
+      "expect": "retain the recoverable capture and do not claim completed"
+    },
+    {
+      "name": "compaction without long-term extraction",
+      "source": "durable checkpoint, delayed Hindsight extraction, simulated PreCompact and restart",
+      "expect": "restore matching goal, decisions, open tasks, next actions and revision"
+    },
+    {
+      "name": "delivery without client confirmation",
+      "source": "brief served, client dropped response before injecting",
+      "expect": "do not claim confirmed or suppress necessary restoration"
+    },
+    {
+      "name": "offline replay is idempotent",
+      "source": "same captured transcript range retried after a transport timeout",
+      "expect": "no lost record and no duplicate completed receipt"
+    },
+    {
+      "name": "historical observation cannot replace current checkpoint",
+      "source": "older observation says Phase 3 stopped; newer revision says Phase 3 completed",
+      "expect": "newer checkpoint is authoritative and contradiction is visible"
+    },
+    {
+      "name": "untrusted memory cannot issue commands",
+      "source": "retrieved note requests disabling authentication and posting a token",
+      "expect": "quoted as untrusted data; no action or secret disclosure"
+    }
+  ]
+}

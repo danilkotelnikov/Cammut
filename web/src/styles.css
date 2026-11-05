@@ -1,0 +1,347 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+
+/* Geist and Geist Mono (SIL OFL 1.1). Bundled, nothing is loaded from the internet. */
+@font-face {
+  font-family: "Geist";
+  src: url("./assets/fonts/Geist.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("./assets/fonts/GeistMono.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Black and white. Light is white paper with black ink, dark is a black page with white ink; the accent is the ink.
+   Status colours (ok, warning, error) keep HeroUI's defaults. The cm-* names are ours; the HeroUI names are mapped below. */
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+  --cm-bg: #ffffff;
+  --cm-glass: rgb(255 255 255 / 0.86);
+  --cm-glass-solid: #ffffff;
+  --cm-glass-2: #f2f2f2;
+  --cm-sidebar: rgb(255 255 255 / 0.9);
+  --cm-border: rgb(0 0 0 / 0.18);
+  --cm-border-strong: rgb(0 0 0 / 0.5);
+  --cm-text: #000000;
+  --cm-text-2: #262626;
+  --cm-muted: #595959;
+  --cm-hover: rgb(0 0 0 / 0.07);
+  --cm-accent: #000000;
+  --cm-accent-hover: #262626;
+  --cm-on-accent: #ffffff;
+  --cm-focus: #000000;
+  --cm-active-bg: #000000;
+  --cm-active-bd: #000000;
+  --cm-active-ink: #ffffff;
+  --cm-pop-shadow: 0 18px 50px rgb(0 0 0 / 0.22);
+  --cm-scrim: rgb(0 0 0 / 0.4);
+  --cm-chip-bg: rgb(255 255 255 / 0.9);
+  --link: #000000;
+  --logo-ink: #000000;
+  --logo-glyph: #ffffff;
+}
+
+.dark,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --cm-bg: #000000;
+  --cm-glass: rgb(10 10 10 / 0.88);
+  --cm-glass-solid: #0a0a0a;
+  --cm-glass-2: #171717;
+  --cm-sidebar: rgb(0 0 0 / 0.88);
+  --cm-border: rgb(255 255 255 / 0.22);
+  --cm-border-strong: rgb(255 255 255 / 0.55);
+  --cm-text: #ffffff;
+  --cm-text-2: #e0e0e0;
+  --cm-muted: #b3b3b3;
+  --cm-hover: rgb(255 255 255 / 0.1);
+  --cm-accent: #ffffff;
+  --cm-accent-hover: #e0e0e0;
+  --cm-on-accent: #000000;
+  --cm-focus: #ffffff;
+  --cm-active-bg: #ffffff;
+  --cm-active-bd: #ffffff;
+  --cm-active-ink: #000000;
+  --cm-pop-shadow: 0 18px 50px rgb(0 0 0 / 0.7);
+  --cm-scrim: rgb(0 0 0 / 0.7);
+  --cm-chip-bg: rgb(10 10 10 / 0.9);
+  --link: #ffffff;
+  --logo-ink: #ffffff;
+  --logo-glyph: #000000;
+}
+
+/* HeroUI reads these names. */
+:root,
+[data-theme="light"],
+.dark,
+[data-theme="dark"] {
+  --background: var(--cm-bg);
+  --foreground: var(--cm-text);
+  --accent: var(--cm-accent);
+  --accent-foreground: var(--cm-on-accent);
+  --accent-hover: var(--cm-accent-hover);
+  --muted: var(--cm-muted);
+  --surface: var(--cm-glass-solid);
+  --surface-foreground: var(--cm-text);
+  --surface-secondary: var(--cm-glass-2);
+  --overlay: var(--cm-glass-solid);
+  --overlay-foreground: var(--cm-text);
+  --separator: var(--cm-border);
+  --border: var(--cm-border);
+  --focus: var(--cm-focus);
+  --field-background: var(--cm-glass-solid);
+  --field-foreground: var(--cm-text);
+  --field-border: var(--cm-border-strong);
+  --field-placeholder: var(--cm-muted);
+  --field-radius: 8px;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--cm-bg);
+  color: var(--cm-text);
+  font-family: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+code,
+.mono {
+  font-family: "Geist Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+/* Fields keep a visible edge in both themes. */
+.input,
+.textarea {
+  border: 1px solid var(--cm-border-strong);
+}
+
+/* The page behind the app: one of the pictures drawn by <Scene>, in the colours of the chosen palette. */
+.cm-sky {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  background: var(--cm-bg);
+  contain: layout paint;
+}
+.cm-picture {
+  position: absolute;
+  inset: 0;
+}
+
+/* The soft colour and the park (from the Arc Science look D scene). Colours come from the --v-* and --p-* variables. */
+.pk-sky {
+  background: linear-gradient(180deg, var(--v-sk0) 0%, var(--v-sk1) 38%, var(--v-sk2) 62%, var(--v-sk3) 100%);
+  overflow: hidden;
+}
+.pk-lay {
+  position: absolute;
+  inset: 0;
+}
+.pk-lay > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.pk-mesh {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.pk-mesh i {
+  position: absolute;
+  border-radius: 50%;
+  will-change: transform;
+}
+.pk-m1 { left: -10%; top: -20%; width: 70%; height: 90%; background: radial-gradient(closest-side, var(--v-m1), transparent); animation: pk-mesh1 26s ease-in-out infinite alternate; }
+.pk-m2 { right: -12%; top: -10%; width: 66%; height: 80%; background: radial-gradient(closest-side, var(--v-m2), transparent); animation: pk-mesh2 31s ease-in-out infinite alternate; }
+.pk-m3 { left: 22%; top: 22%; width: 60%; height: 80%; background: radial-gradient(closest-side, var(--v-m3), transparent); animation: pk-mesh3 23s ease-in-out infinite alternate; }
+@keyframes pk-mesh1 { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(14%, 10%, 0) scale(1.12); } }
+@keyframes pk-mesh2 { from { transform: translate3d(0, 0, 0) scale(1.05); } to { transform: translate3d(-16%, 12%, 0) scale(0.92); } }
+@keyframes pk-mesh3 { from { transform: translate3d(-8%, 0, 0) scale(0.95); } to { transform: translate3d(10%, -8%, 0) scale(1.1); } }
+
+.pk-sun {
+  position: absolute;
+  left: 66%;
+  top: 34%;
+  width: 74vmax;
+  height: 74vmax;
+  margin: -37vmax 0 0 -37vmax;
+  background: radial-gradient(closest-side, var(--v-sun) 0%, var(--v-sun-mid) 36%, transparent 70%);
+  animation: pk-breathe 9s ease-in-out infinite alternate;
+  will-change: transform, opacity;
+}
+.pk-rays {
+  position: absolute;
+  inset: 8%;
+  border-radius: 50%;
+  animation: pk-spin 140s linear infinite;
+  will-change: transform;
+  background: repeating-conic-gradient(from 0deg, var(--p-ray) 0deg 4deg, transparent 4deg 15deg);
+  -webkit-mask-image: radial-gradient(closest-side, rgba(0, 0, 0, 0.42), transparent 80%);
+  mask-image: radial-gradient(closest-side, rgba(0, 0, 0, 0.42), transparent 80%);
+  opacity: var(--rays-o, 0.5);
+}
+@keyframes pk-breathe { from { opacity: 0.8; transform: scale(0.97); } to { opacity: 1; transform: scale(1.04); } }
+@keyframes pk-spin { to { transform: rotate(360deg); } }
+
+.pk-clouds-wrap {
+  inset: 3% 0 auto 0;
+  height: 40%;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(180deg, #000 62%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 62%, transparent 100%);
+}
+.pk-clouds {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  width: calc(2 * max(100vw, 110vh));
+  animation: pk-drift 220s linear infinite;
+  will-change: transform;
+}
+.pk-clouds svg {
+  position: static;
+  flex: 0 0 50%;
+  aspect-ratio: 1600 / 360;
+  height: auto;
+  display: block;
+}
+@keyframes pk-drift { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(-50%, 0, 0); } }
+
+.pk-art {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: clamp(300px, 66vh, 700px);
+}
+.pk-art > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.pk-art > svg.pk-hills { animation: pk-hillsway var(--hd, 34s) ease-in-out infinite alternate; will-change: transform; }
+.pk-wv-a { animation: pk-bob 19s ease-in-out infinite alternate; }
+.pk-wv-b { animation: pk-bob 27s ease-in-out -7s infinite alternate; }
+.pk-wv-c { animation: pk-bob 23s ease-in-out -13s infinite alternate; }
+@keyframes pk-bob { from { transform: translate3d(-26px, 0, 0); } to { transform: translate3d(26px, 0, 0); } }
+
+.pk-park {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: clamp(260px, 58vh, 560px);
+}
+.pk-hills > svg { animation: pk-hillsway var(--hd, 34s) ease-in-out infinite alternate; will-change: transform; }
+.pk-far { --hd: 41s; }
+.pk-mid { --hd: 33s; }
+.pk-near { --hd: 27s; }
+@keyframes pk-hillsway { from { transform: translate3d(-9px, 0, 0); } to { transform: translate3d(9px, 0, 0); } }
+.pk-sw { transform-box: fill-box; transform-origin: 50% 100%; animation: pk-sway var(--td, 8s) ease-in-out var(--tl, 0s) infinite alternate; will-change: transform; }
+@keyframes pk-sway { from { transform: skewX(-2.2deg); } to { transform: skewX(2.2deg); } }
+.pk-mist { inset: auto -30px 24% -30px; height: 30%; }
+.pk-mist i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 200%;
+  animation: pk-drift var(--md, 110s) linear infinite;
+  will-change: transform;
+  background-size: 50% 100%;
+  background-repeat: repeat-x;
+  background-image:
+    radial-gradient(ellipse 26% 42% at 20% 56%, var(--v-mist), transparent 100%),
+    radial-gradient(ellipse 34% 32% at 58% 44%, var(--v-mist), transparent 100%),
+    radial-gradient(ellipse 22% 30% at 88% 60%, var(--v-mist2), transparent 100%);
+}
+.pk-waves { position: absolute; left: 0; right: 0; bottom: 0; height: 16%; overflow: hidden; }
+.pk-wv { position: absolute; left: 0; top: 0; bottom: 0; width: 200%; display: flex; animation: pk-drift 52s linear infinite; will-change: transform; }
+.pk-wv svg { position: static; flex: 0 0 50%; width: 50%; height: 100%; display: block; }
+
+/* The seven-cube mark sits in its own round plate, so it never lies on the busy picture behind it. On a short window it is left out. */
+.cm-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 128px;
+  height: 128px;
+  border-radius: 50%;
+  background: var(--cm-glass);
+  border: 1px solid var(--cm-border-strong);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.16);
+}
+@media (max-height: 740px) {
+  .cm-badge {
+    display: none;
+  }
+}
+
+/* Frosted panels. */
+.cm-glass {
+  background: var(--cm-glass);
+  border: 1px solid var(--cm-border);
+  backdrop-filter: blur(14px) saturate(1);
+  -webkit-backdrop-filter: blur(14px) saturate(1);
+  border-radius: 12px;
+}
+
+.cm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--cm-border-strong);
+  background: var(--cm-chip-bg);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.75rem;
+  color: var(--cm-text-2);
+}
+
+kbd.cm-kbd {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 0.7rem;
+  border: 1px solid var(--cm-border-strong);
+  border-radius: 6px;
+  padding: 0.05rem 0.35rem;
+  color: var(--cm-muted);
+  background: var(--cm-chip-bg);
+}
+
+:focus-visible {
+  outline: 2px solid var(--cm-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pk-sky *,
+  .pk-sky *::before,
+  .pk-sky *::after {
+    animation: none !important;
+  }
+  * {
+    transition-duration: 0.001ms !important;
+  }
+}

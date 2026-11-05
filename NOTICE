@@ -1,0 +1,7 @@
+Cammut
+Copyright (C) 2026 Danil Kotelnikov
+
+Licensed under the GNU Affero General Public License, version 3 only (AGPL-3.0-only). See LICENSE.
+This covers the code, the documents and the design decisions written in them.
+Third-party packages keep their own licences.
+Model weights are not included.

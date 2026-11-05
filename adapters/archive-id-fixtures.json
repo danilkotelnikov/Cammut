@@ -1,0 +1,74 @@
+[
+  {
+    "meta": {
+      "agent": "claude-code",
+      "session": "0a1b2c3d-1111-2222-3333-444455556666",
+      "kind": "transcript",
+      "relpath": "",
+      "fp": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "start": 0,
+      "end": 1048576
+    },
+    "id": "fb541d20366715b0d0a16602424cf85d"
+  },
+  {
+    "meta": {
+      "agent": "claude-code",
+      "session": "0a1b2c3d-1111-2222-3333-444455556666",
+      "kind": "sidecar",
+      "relpath": "subagents/agent-a1b2c3.jsonl",
+      "fp": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "start": 0,
+      "end": 52311
+    },
+    "id": "afa3f2b0facf9e43f67342d61aa95db3"
+  },
+  {
+    "meta": {
+      "agent": "codex",
+      "session": "7f6e5d4c-aaaa-bbbb-cccc-ddddeeeeffff",
+      "kind": "transcript",
+      "relpath": "",
+      "fp": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "start": 1048576,
+      "end": 2097152
+    },
+    "id": "7d99ccdb15fb665e4ec10845ee8f618f"
+  },
+  {
+    "meta": {
+      "agent": "claude-code",
+      "session": "0a1b2c3d-1111-2222-3333-444455556666",
+      "kind": "transcript",
+      "relpath": "",
+      "fp": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "start": 0,
+      "end": 1048576
+    },
+    "id": "c7887eea48496cac2cf84568d29092a0"
+  },
+  {
+    "meta": {
+      "agent": "claude-code",
+      "session": "long_session-id_with.under_scores",
+      "kind": "transcript",
+      "relpath": "",
+      "fp": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "start": 1099510579200,
+      "end": 1099511627776
+    },
+    "id": "71549f0b9d80dc58887b597ad0c5ab6e"
+  },
+  {
+    "meta": {
+      "agent": "claude-code",
+      "session": "s",
+      "kind": "sidecar",
+      "relpath": "subagents/nestedwin-path.jsonl",
+      "fp": "0000000000000000000000000000000000000000000000000000000000000000",
+      "start": 17,
+      "end": 18
+    },
+    "id": "8b5d395c92dd0162773aac44842829f6"
+  }
+]

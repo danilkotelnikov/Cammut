@@ -1,0 +1,36 @@
+<div class="wrap">
+<div class="prose tight">
+<p class="kicker">Interactive guide</p>
+<h1>Setup guide</h1>
+<p>Answer four questions and get the exact commands and config for your agent. Everything is generated <strong>in this page</strong>: nothing you type is sent anywhere, and the guide never asks for a token.</p>
+</div>
+
+<noscript><div class="box"><h3>JavaScript is off</h3><p>The generator needs it. Without it, follow the <a href="/docs/agents/">agent configuration page</a>, which lists the same snippets for each agent.</p></div></noscript>
+
+<div class="wiz" id="wiz" hidden>
+<form class="form" id="wform" autocomplete="off">
+<fieldset><legend>1 · Your Cammut MCP endpoint</legend>
+<input type="url" id="endpoint" placeholder="{{endpoint_placeholder}}" spellcheck="false" aria-describedby="endhint">
+<p class="hint" id="endhint">HTTPS, ending in <code>/mcp</code>. Leave empty to see the placeholder.</p>
+<div class="err" id="enderr" role="alert" hidden></div>
+</fieldset>
+<fieldset><legend>2 · Agent</legend>
+<label><input type="radio" name="agent" value="claude" checked> Claude Code</label>
+<label><input type="radio" name="agent" value="codex"> Codex CLI</label>
+<label><input type="radio" name="agent" value="warp"> Warp</label>
+<label><input type="radio" name="agent" value="other"> Other MCP client</label>
+</fieldset>
+<fieldset><legend>3 · What may this agent use?</legend>
+<input type="text" id="upstreams" placeholder="github, hindsight" spellcheck="false" aria-describedby="uphint">
+<p class="hint" id="uphint">Upstream names you registered (comma-separated). Each becomes a <code>name/*</code> scope.</p>
+<label><input type="checkbox" id="memory" checked> Agent memory (notes, brief, handoff)</label>
+<div class="err" id="uperr" role="alert" hidden></div>
+</fieldset>
+<fieldset><legend>4 · Shell on the computer running the agent</legend>
+<label><input type="radio" name="shell" value="ps" checked> PowerShell (Windows)</label>
+<label><input type="radio" name="shell" value="sh"> bash / zsh (macOS, Linux)</label>
+</fieldset>
+</form>
+<div id="out" aria-live="polite"></div>
+</div>
+</div>

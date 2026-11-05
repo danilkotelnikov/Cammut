@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cammut-edge-staging",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  // Not needed: nodejs_compat (WebCrypto only). global_fetch_strictly_public is only for
+  // URL-based client ids (CIMD), which stay off.
+  "compatibility_flags": [],
+  "workers_dev": false,
+  "routes": [{ "pattern": "mcp-staging.example", "custom_domain": true }],
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "REPLACE_WITH_KV_ID" }],
+  "vars": {
+    "PUBLIC_ORIGIN": "https://mcp-staging.example",
+    "EDGE_AUD": "cammut-staging",
+    "EDGE_KID": "edge-1",
+    "APPWRITE_ENDPOINT": "https://fra.cloud.appwrite.io/v1",
+    "APPWRITE_PROJECT_ID": "your-appwrite-project",
+    "ALLOWED_GITHUB_IDS": "12345",
+    "ALLOWED_GOOGLE_EMAILS": "",
+    "MCP_SERVERS": "github,hindsight,composio",
+    "ORIGIN_URL": "https://origin-staging.example"
+  },
+  "observability": { "enabled": false }
+}

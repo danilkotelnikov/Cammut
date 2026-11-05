@@ -1,0 +1,18 @@
+# Cammut entry for Codex CLI (Astra 6). Prepared 2026-10-12. NOT applied to ~/.codex/config.toml yet.
+#
+# Needs: the SSH tunnel holding 127.0.0.1:7421, and the user variable
+# CAMMUT_TOKEN_ASTRA (the script sets it; the value is never printed or written to a file).
+# Fallback URL if the tunnel is down and the public name answers from this PC (UNVERIFIED):
+#   url = "https://<your-cammut-host>/mcp"
+
+[mcp_servers.cammut]
+url = "http://127.0.0.1:7421/mcp"
+bearer_token_env_var = "CAMMUT_TOKEN_ASTRA"
+startup_timeout_sec = 30
+tool_timeout_sec = 60
+
+# The existing [mcp_servers.hindsight] and [mcp_servers.openviking] entries use the services' own
+# full-power keys. After the Cammut entry works, remove them so Astra has one scoped door.
+# Later, when Cammut 0.3.0+ with the memory upstream is deployed, create a second token with
+#   -scopes 'memory/*' -profile direct:memory
+# and point a second entry at it (memory_brief, memory_recall, memory_remember, memory_handoff, memory_projects).

@@ -1,0 +1,657 @@
+#!/usr/bin/env python3
+"""hindsight-llm: switch the LLM behind the Hindsight memory service. See deploy/hindsight-llm.md.
+
+  show | presets | history | test | rollback [--to STAMP]
+  set --provider P --model M [--base-url URL] [--preset NAME] [--timeout S] [--max-concurrent N] [--max-retries N]
+      (--key-stdin | --key-file PATH | --keep-key) [--yes] [--allow-insecure-url] [--provider-unlisted]
+
+Standard library only. Hindsight reads its LLM only from environment variables, so a switch writes a compose override
+(compose.llm.yaml) plus a 0600 key file, recreates ONLY the hindsight service, runs a canary and rolls back on any failure.
+The key is read from stdin or a file, never from argv or the caller's environment, and is never printed or logged.
+Exit codes: 0 ok, 1 apply failed and was rolled back (or test failed), 2 bad input, 3 refused to start, 4 rollback FAILED.
+"""
+import argparse, contextlib, datetime, hashlib, ipaddress, json, os, re, shlex, subprocess, sys, tempfile, time, urllib.parse
+try:
+    import fcntl
+except ImportError:  # Windows: only the test suite runs there
+    fcntl = None
+    import msvcrt
+
+E = os.environ.get
+ROOT = E('HLLM_ROOT', '')                       # prefix for every default path (tests use a temp dir)
+
+
+def _p(name, default):
+    return E('HLLM_' + name) or ROOT + default
+
+
+COMPOSE_DIR = _p('COMPOSE_DIR', '/opt/shared-memory/deployment')
+SHARED_ENV = _p('SHARED_ENV', '/root/private/shared-memory.env')
+LLM_ENV = _p('LLM_ENV', '/root/private/hindsight-llm.env')
+HIST = _p('STATE_DIR', '/var/lib/hindsight-llm') + '/history'
+LOCK = _p('LOCK', '/var/lock/hindsight-llm.lock')
+BACKUP_LOCK = _p('BACKUP_LOCK', '/var/backups/memory/.mem-backup.lock')   # what deploy/mem-backup flocks
+LOGF = _p('LOG', '/var/log/hindsight-llm.log')
+OVERRIDE = COMPOSE_DIR + '/compose.llm.yaml'
+DOCKER = shlex.split(E('HLLM_DOCKER', 'docker'))
+CURL = shlex.split(E('HLLM_CURL', 'curl'))
+API = E('HLLM_API', 'http://127.0.0.1:8888')
+BANK = E('HLLM_BANK', 'alice-shared')
+PROJECT = E('HLLM_PROJECT', 'shared-memory-pilot')
+CTR = E('HLLM_CONTAINER', 'shared-memory-pilot-hindsight-1')
+WAIT = int(E('HLLM_HEALTH_WAIT', '180'))
+POLL = float(E('HLLM_POLL', '3'))
+
+KEYVAR = 'HINDSIGHT_LLM_API_KEY'
+V = lambda n: 'HINDSIGHT_API_LLM_' + n
+KNOWN = {'openai', 'openai-responses', 'anthropic', 'gemini', 'groq', 'ollama', 'ollama-cloud', 'lmstudio', 'minimax',
+         'deepseek', 'zai', 'atlas', 'opencode-go', 'vertexai', 'openrouter', 'requesty', 'volcano', 'litellm'}
+PRESETS = {  # model is a suggestion: always pass --model to choose
+    'general-compute': dict(provider='openai', base_url='https://api.generalcompute.com/v1', model='minimax-m2.7'),
+    'openai': dict(provider='openai', base_url='https://api.openai.com/v1', model='gpt-4o-mini'),
+    'anthropic': dict(provider='anthropic', base_url='', model='claude-haiku-4-5'),
+    'openrouter': dict(provider='openai', base_url='https://openrouter.ai/api/v1', model='openai/gpt-4o-mini'),
+    'deepseek': dict(provider='deepseek', base_url='', model='deepseek-chat'),
+    'groq': dict(provider='groq', base_url='', model='openai/gpt-oss-20b'),
+    'custom': {},
+}
+FIELDS = [('provider', 'PROVIDER'), ('base_url', 'BASE_URL'), ('model', 'MODEL'), ('timeout', 'TIMEOUT'),
+          ('max_concurrent', 'MAX_CONCURRENT'), ('max_retries', 'MAX_RETRIES')]
+DEFAULTS = dict(timeout='120', max_concurrent='2', max_retries='1')
+PEROP = re.compile(r'HINDSIGHT_API_(RETAIN|REFLECT|CONSOLIDATION|MENTAL_MODEL_REFRESH)_LLM_')
+SENTENCE = 'Canary note: the synthetic project Quokka keeps its build cache on a server named Marigold.'
+QUESTION = 'Which server keeps the build cache for project Quokka?'
+
+
+class Bad(Exception): pass      # exit 2
+class Refuse(Exception): pass   # exit 3
+class Fail(Exception): pass     # apply step failed
+
+
+# ---------- output that can never carry a secret ----------
+SECRETS = set()
+
+
+def red(s):
+    for k in SECRETS:
+        s = s.replace(k, '***')
+    return s
+
+
+def say(*a, err=False):
+    print(red(' '.join(str(x) for x in a)), file=sys.stderr if err else sys.stdout)
+
+
+def log(**kv):
+    try:
+        os.makedirs(os.path.dirname(LOGF), exist_ok=True)
+        ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+        with open(LOGF, 'a', encoding='utf-8') as f:
+            f.write(red(ts + ' ' + ' '.join(f'{k}={json.dumps(str(v))}' for k, v in kv.items())) + '\n')
+    except OSError:
+        pass
+
+
+def safe_url(u):  # no userinfo, no query values
+    if not u:
+        return '(provider default)'
+    try:
+        s = urllib.parse.urlsplit(u)
+        return urllib.parse.urlunsplit((s.scheme, (s.hostname or '?') + (f':{s.port}' if s.port else ''), s.path, '?...' if s.query else '', ''))
+    except ValueError:
+        return '(unparseable)'
+
+
+def host_of(u):
+    try:
+        return urllib.parse.urlsplit(u).hostname or '-'
+    except ValueError:
+        return '-'
+
+
+# ---------- files ----------
+def write(path, data, mode):
+    """atomic: temp file in the same directory, fsync, chmod, rename"""
+    data = data.encode() if isinstance(data, str) else data
+    d = os.path.dirname(path)
+    os.makedirs(d, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=d, prefix='.hllm-')
+    try:
+        with os.fdopen(fd, 'wb') as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
+    if os.name == 'posix':
+        dfd = os.open(d, os.O_RDONLY)
+        os.fsync(dfd)
+        os.close(dfd)
+
+
+def rd(path):
+    with open(path, 'rb') as f:
+        return f.read()
+
+
+def sha(path):
+    return hashlib.sha256(rd(path)).hexdigest()
+
+
+def dotenv(path):
+    out = {}
+    try:
+        lines = open(path, encoding='utf-8').read().splitlines()
+    except OSError:
+        return out
+    for ln in lines:
+        m = re.match(r'\s*(?:export\s+)?([A-Za-z_]\w*)\s*=\s*(.*?)\s*$', ln)
+        if m and not ln.lstrip().startswith('#'):
+            v = m.group(2)
+            if len(v) >= 2 and v[0] == v[-1] and v[0] in '\'"':
+                v = v[1:-1]
+            out[m.group(1)] = v
+    return out
+
+
+@contextlib.contextmanager
+def locks():
+    held = []
+    try:
+        for path, who in ((LOCK, 'another hindsight-llm run'), (BACKUP_LOCK, 'mem-backup')):
+            if path == BACKUP_LOCK and not os.path.isdir(os.path.dirname(path)):
+                continue
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+            held.append(fd)
+            try:
+                if fcntl:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                else:
+                    msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            except OSError:
+                raise Refuse(f'{who} is running (lock {path} is held); nothing was changed')
+        yield
+    finally:
+        for fd in held:
+            os.close(fd)
+
+
+# ---------- docker / curl ----------
+def run(argv, inp=None, cwd=None, timeout=900):
+    try:
+        r = subprocess.run(argv, input=inp, capture_output=True, text=True, encoding='utf-8', cwd=cwd, timeout=timeout)
+        return r.returncode, r.stdout, r.stderr
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 127, '', type(e).__name__
+
+
+def compose(*args):
+    argv = DOCKER + ['compose', '-p', PROJECT]
+    for f in ['compose.yaml', 'compose.4gb.yaml'] + (['compose.llm.yaml'] if os.path.exists(OVERRIDE) else []):
+        argv += ['-f', f]
+    for e in [SHARED_ENV] + ([LLM_ENV] if os.path.exists(LLM_ENV) else []):
+        argv += ['--env-file', e]
+    return run(argv + list(args), cwd=COMPOSE_DIR)
+
+
+def compose_cmdline():
+    return ('docker compose -p ' + PROJECT + ' -f compose.yaml -f compose.4gb.yaml -f compose.llm.yaml --env-file ' + SHARED_ENV
+            + ' --env-file ' + LLM_ENV + ' up -d --no-deps hindsight')
+
+
+def container_env():
+    rc, out, _ = run(DOCKER + ['inspect', '-f', '{{json .Config.Env}}', CTR])
+    if rc:
+        return None
+    try:
+        return dict(x.split('=', 1) for x in json.loads(out) if '=' in x)
+    except ValueError:
+        return None
+
+
+def effective():
+    env = container_env()
+    if env is not None:
+        return env, 'running container ' + CTR
+    rc, out, _ = compose('config', '--format', 'json')
+    try:
+        return json.loads(out)['services']['hindsight']['environment'], 'compose config (container not running)'
+    except (ValueError, KeyError, TypeError):
+        return None, ''
+
+
+BEARER = ''
+
+
+def http(method, path, body=None, timeout=60):
+    """curl reads its whole request (URL, bearer, body) from stdin, so no secret is ever in argv"""
+    q = lambda s: s.replace('\\', '\\\\').replace('"', '\\"')
+    cfg = ['silent', 'show-error', f'max-time = {timeout}', f'url = "{q(API + path)}"', f'request = "{method}"',
+           f'header = "Authorization: Bearer {q(BEARER)}"']
+    if body is not None:
+        cfg += ['header = "Content-Type: application/json"', f'data = "{q(json.dumps(body))}"']
+    cfg.append('write-out = "\\n%{http_code}"')
+    rc, out, _ = run(CURL + ['-K', '-'], inp='\n'.join(cfg) + '\n', timeout=timeout + 30)
+    if rc:
+        return 0, None
+    txt, _, code = out.rpartition('\n')
+    try:
+        js = json.loads(txt)
+    except ValueError:
+        js = None
+    return (int(code) if code.strip().isdigit() else 0), js
+
+
+def wait_health():
+    end = time.time() + WAIT
+    while True:
+        st, _ = http('GET', '/health', timeout=10)
+        if st == 200:
+            return
+        if time.time() >= end:
+            raise Fail(f'health check {API}/health did not return 200 within {WAIT}s (last status {st})')
+        time.sleep(POLL)
+
+
+def canary():
+    """probe on the real bank (read-only), then a scratch-bank round trip; the scratch bank is always deleted"""
+    st, js = http('POST', f'/v1/default/banks/{BANK}/health/llm', None, 120)
+    if st in (404, 405, 501):
+        say(f'canary: probe unavailable (HTTP {st}; Hindsight serves it only with HINDSIGHT_API_ENABLE_BANK_LLM_HEALTH=true): skipped, the round trip below is the proof')
+    elif st != 200 or not isinstance(js, dict) or not js.get('operations'):
+        raise Fail(f'canary: probe on bank {BANK} failed (HTTP {st})')
+    else:
+        ops = js['operations']
+        say('canary: probe ' + ', '.join(f"{o.get('operation')}={o.get('status')}" for o in ops))
+        bad = [o for o in ops if not o.get('ok') and o.get('status') != 'not_configured']
+        if bad:
+            raise Fail('canary: probe failed for ' + ', '.join(f"{o.get('operation')} ({o.get('status')})" for o in bad))
+    b = f'/v1/default/banks/llm-canary-{int(time.time())}'
+    say('canary: scratch bank ' + b.rsplit('/', 1)[1])
+    try:
+        st, _ = http('PUT', b, {})
+        if not 200 <= st < 300:
+            raise Fail(f'canary: creating the scratch bank failed (HTTP {st})')
+        st, js = http('POST', b + '/memories', {'async': False, 'items': [{'content': SENTENCE, 'document_id': 'llm-canary'}]}, 300)
+        if not 200 <= st < 300 or (js or {}).get('success') is False:
+            raise Fail(f'canary: synchronous retain failed (HTTP {st}); the new LLM cannot extract facts')
+        st, js = http('POST', b + '/memories/recall', {'query': QUESTION}, 120)
+        n = len((js or {}).get('results') or []) if st == 200 else 0
+        if st != 200 or n < 1:
+            raise Fail(f'canary: recall returned no fact (HTTP {st}, {n} results)')
+        say(f'canary: round trip ok ({n} fact(s) recalled)')
+    finally:
+        for _ in range(2):
+            st, _ = http('DELETE', b)
+            if 200 <= st < 300:
+                say('canary: scratch bank deleted')
+                break
+        else:
+            say(f'WARNING: scratch bank {b.rsplit("/", 1)[1]} was NOT deleted (HTTP {st}); delete it by hand', err=True)
+
+
+# ---------- validation ----------
+def private_host(h):
+    if h in ('localhost', 'host.docker.internal') or h.endswith('.localhost'):
+        return True
+    try:
+        ip = ipaddress.ip_address(h)
+    except ValueError:
+        return False
+    return ip.is_loopback or ip.is_private
+
+
+def check_url(u, insecure):
+    if not u:
+        return
+    if not re.fullmatch(r"[A-Za-z0-9._~:/?&=%+@,;\[\]-]{1,512}", u):
+        raise Bad('--base-url: characters not allowed (value not shown)')
+    try:
+        s = urllib.parse.urlsplit(u)
+        s.port
+    except ValueError:
+        raise Bad('--base-url: not a valid URL (value not shown)')
+    if '@' in s.netloc or s.username is not None or s.password is not None:
+        raise Bad('--base-url: user info (user:pass@) is not allowed; the key goes through --key-stdin/--key-file')
+    if not s.hostname:
+        raise Bad('--base-url: no host')
+    if s.scheme == 'https':
+        return
+    if s.scheme != 'http':
+        raise Bad('--base-url: must start with https://')
+    if not insecure:
+        raise Bad('--base-url: http:// is refused; use https:// (http needs --allow-insecure-url and a loopback/private address)')
+    if not private_host(s.hostname):
+        raise Bad('--base-url: http:// is accepted only for loopback or private addresses')
+    say('WARNING: plain http base URL. Inside the container 127.0.0.1 is the container itself; use host.docker.internal or the docker bridge address.', err=True)
+
+
+def int_arg(name, v, lo, hi, dflt):
+    v = dflt if v is None else v
+    if not str(v).isdigit() or not lo <= int(v) <= hi:
+        raise Bad(f'--{name}: must be an integer from {lo} to {hi}')
+    return str(int(v))
+
+
+def resolve(a, cur):
+    for k, v in vars(a).items():
+        if isinstance(v, str) and re.search(r'[\s\x00-\x1f\x7f]', v):
+            raise Bad(f'--{k.replace("_", "-")}: whitespace or control characters are not allowed')
+    if a.preset is not None and a.preset not in PRESETS:
+        raise Bad('unknown preset (see: hindsight-llm presets)')
+    p = PRESETS.get(a.preset, {})
+    if a.preset == 'custom' and not (a.provider and a.model and a.base_url):
+        raise Bad('preset custom needs --provider, --model and --base-url')
+    provider, model = a.provider or p.get('provider'), a.model or p.get('model')
+    base = a.base_url if a.base_url is not None else p.get('base_url', '')
+    if not provider or not model:
+        raise Bad('--provider and --model are required (or --preset NAME)')
+    if not re.fullmatch(r'[a-z][a-z0-9-]{0,31}', provider):
+        raise Bad('--provider: only a-z, 0-9 and - (value not shown)')
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}', model):
+        raise Bad('--model: only letters, digits and . _ : / @ + - (value not shown)')
+    if provider not in KNOWN:
+        if not a.provider_unlisted:
+            raise Bad('--provider is not in the known list (' + ', '.join(sorted(KNOWN)) + '); add --provider-unlisted to override')
+        say('WARNING: provider is not in the known list; the canary decides whether it works', err=True)
+    check_url(base, a.allow_insecure_url)
+    c = cur or {}
+    return dict(provider=provider, base_url=base, model=model,
+                timeout=int_arg('timeout', a.timeout, 1, 3600, c.get(V('TIMEOUT')) or DEFAULTS['timeout']),
+                max_concurrent=int_arg('max-concurrent', a.max_concurrent, 1, 64, c.get(V('MAX_CONCURRENT')) or DEFAULTS['max_concurrent']),
+                max_retries=int_arg('max-retries', a.max_retries, 0, 10, c.get(V('MAX_RETRIES')) or DEFAULTS['max_retries']))
+
+
+def read_key(a, cur):
+    if a.keep_key:
+        k = None
+        m = re.fullmatch(rf"{KEYVAR}='(.*)'", dotenv_raw(LLM_ENV))
+        k = m.group(1) if m else (cur or {}).get(V('API_KEY'))
+        if not k:
+            raise Bad('--keep-key: no existing key found (neither ' + LLM_ENV + ' nor the running container)')
+    else:
+        if a.key_stdin and sys.stdin.isatty():
+            raise Bad('--key-stdin: stdin is a terminal; use: read -rs KEY; printf %s "$KEY" | hindsight-llm set ... --key-stdin')
+        try:
+            k = sys.stdin.read() if a.key_stdin else open(a.key_file, encoding='utf-8').read()
+        except OSError:
+            raise Bad('--key-file: cannot read the file')
+        k = k[:-2] if k.endswith('\r\n') else k[:-1] if k.endswith('\n') else k
+    if len(k) >= 4:
+        SECRETS.add(k)   # an empty or tiny string must not turn the redactor into noise
+    if not re.fullmatch(r"[\x21-\x26\x28-\x7e]{8,4096}", k):
+        raise Bad('key: must be 8-4096 printable ASCII characters without spaces or quotes (key not shown)')
+    return k
+
+
+def dotenv_raw(path):
+    try:
+        for ln in open(path, encoding='utf-8').read().splitlines():
+            if ln.startswith(KEYVAR + '='):
+                return ln
+    except OSError:
+        pass
+    return ''
+
+
+def override_text(s):
+    rows = [(V('PROVIDER'), s['provider']), (V('BASE_URL'), s['base_url']), (V('MODEL'), s['model']),
+            (V('API_KEY'), '${%s:?missing /root/private/hindsight-llm.env}' % KEYVAR), (V('MAX_CONCURRENT'), s['max_concurrent']),
+            (V('TIMEOUT'), s['timeout']), (V('MAX_RETRIES'), s['max_retries'])]
+    return ('# Generated by hindsight-llm. Do not edit by hand: use hindsight-llm set / rollback.\n'
+            'services:\n  hindsight:\n    environment:\n' + ''.join(f'      {k}: "{v}"\n' for k, v in rows))
+
+
+def envfile_text(k):
+    return f"# Written by hindsight-llm (mode 0600). Read only through compose.llm.yaml.\n{KEYVAR}='{k}'\n"
+
+
+# ---------- snapshots ----------
+def stamp_now():
+    base = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    s, n = base, 1
+    while os.path.exists(f'{HIST}/{s}'):
+        n += 1
+        s = f'{base}-{n}'
+    return s
+
+
+def snapshots():
+    return sorted(d for d in os.listdir(HIST) if re.fullmatch(r'\d{8}T\d{6}Z(-\d+)?', d)) if os.path.isdir(HIST) else []
+
+
+def snapshot(reason, env):
+    st = stamp_now()
+    d = f'{HIST}/{st}'
+    for x in (os.path.dirname(HIST), HIST):
+        os.makedirs(x, exist_ok=True)
+        os.chmod(x, 0o700)
+    os.makedirs(d, exist_ok=True)
+    os.chmod(d, 0o700)
+    had_o, had_k = os.path.exists(OVERRIDE), os.path.exists(LLM_ENV)
+    if had_o:
+        write(d + '/compose.llm.yaml', rd(OVERRIDE), 0o600)
+    if had_k:
+        write(d + '/hindsight-llm.env', rd(LLM_ENV), 0o600)
+    rc, img, _ = run(DOCKER + ['inspect', '-f', '{{.Image}}', CTR])
+    s = {n: (env or {}).get(V(v), '') for n, v in FIELDS[:3]}
+    write(d + '/meta.json', json.dumps(dict(stamp=st, reason=reason, had_override=had_o, had_key_file=had_k,
+          key_file_sha256=sha(LLM_ENV) if had_k else None, image_id=img.strip() if rc == 0 else '',
+          provider=s['provider'], model=s['model'], base_url_host=host_of(s['base_url'])), indent=1) + '\n', 0o600)
+    return d
+
+
+def restore(d):
+    meta = json.loads(rd(d + '/meta.json'))
+    for name, dest, mode, had in (('compose.llm.yaml', OVERRIDE, 0o644, meta['had_override']),
+                                  ('hindsight-llm.env', LLM_ENV, 0o600, meta['had_key_file'])):
+        if had:
+            write(dest, rd(f'{d}/{name}'), mode)
+        elif os.path.exists(dest):
+            os.unlink(dest)
+    if meta['had_key_file'] and sha(LLM_ENV) != meta['key_file_sha256']:
+        raise Fail('restored key file does not match the snapshot hash')
+    rc, _, err = compose('up', '-d', '--no-deps', 'hindsight')
+    if rc:
+        raise Fail('docker compose up failed during restore: ' + red(err.strip()[-300:]))
+    wait_health()
+
+
+def loud_rollback_failure(d, why):
+    say('', '!!! ROLLBACK FAILED: the hindsight service may be DOWN or on the wrong LLM !!!', f'reason: {why}',
+        f'snapshot: {d}', 'manual recovery (run as root):', f'  cp {d}/compose.llm.yaml {OVERRIDE}   (or: rm -f {OVERRIDE} if that file is not in the snapshot)',
+        f'  cp {d}/hindsight-llm.env {LLM_ENV} && chmod 600 {LLM_ENV}   (or: rm -f it if not in the snapshot)',
+        f'  cd {COMPOSE_DIR} && {compose_cmdline()}', err=True)
+
+
+# ---------- commands ----------
+def preflight(need_files=True):
+    global BEARER
+    for f in ('compose.yaml', 'compose.4gb.yaml'):
+        if not os.path.isfile(f'{COMPOSE_DIR}/{f}'):
+            raise Refuse(f'{COMPOSE_DIR}/{f} not found')
+    BEARER = dotenv(SHARED_ENV).get('HINDSIGHT_API_KEY', '')
+    if not BEARER:
+        raise Refuse(f'HINDSIGHT_API_KEY not found in {SHARED_ENV}: the canary cannot authenticate')
+    SECRETS.add(BEARER)
+
+
+def cmd_show(a):
+    env, src = effective()
+    if env is None:
+        raise Refuse('cannot read the hindsight settings (container not found and compose config failed)')
+    say(f'source        : {src}', f'override file : {"present" if os.path.exists(OVERRIDE) else "absent"} ({OVERRIDE})')
+    for n, v in FIELDS:
+        say(f'{n:<14}: ' + (safe_url(env.get(V(v), '')) if n == 'base_url' else env.get(V(v), '') or '(unset)'))
+    k = env.get(V('API_KEY'), '')
+    say('api_key       : ' + (f'set (length {len(k)})' if k else 'NOT SET'))
+    known = {V(v) for _, v in FIELDS} | {V('API_KEY')}
+    po = sorted(x for x in env if PEROP.match(x))
+    other = sorted(x for x in env if x.startswith('HINDSIGHT_API_') and 'LLM' in x and x not in known and x not in po)
+    say('per-operation LLM overrides: ' + (', '.join(po) + ' (these win over the switch; values not shown)' if po else 'none'))
+    say('other LLM variables: ' + (', '.join(other) + ' (values not shown)' if other else 'none'))
+    return 0
+
+
+def cmd_presets(a):
+    say('PRESET           PROVIDER   BASE URL                          SUGGESTED MODEL (pass --model to choose)')
+    for n, p in PRESETS.items():
+        say(f"{n:<16} {p.get('provider', '(you)'):<10} {p.get('base_url') or ('(you)' if not p else '(provider default)'):<33} {p.get('model', '(you)')}")
+    return 0
+
+
+def cmd_history(a):
+    say('STAMP                PROVIDER   MODEL                BASE URL HOST      (state BEFORE that change)')
+    for st in snapshots():
+        try:
+            m = json.loads(rd(f'{HIST}/{st}/meta.json'))
+        except (OSError, ValueError):
+            m = {}
+        say(f"{st:<20} {m.get('provider') or '-':<10} {m.get('model') or '-':<20} {m.get('base_url_host') or '-'}")
+    return 0
+
+
+def cmd_test(a):
+    preflight()
+    with locks():
+        try:
+            wait_health()
+            canary()
+        except Fail as e:
+            say('TEST FAILED: ' + str(e), err=True)
+            log(cmd='test', outcome='failed', why=e)
+            return 1
+    say('TEST PASSED')
+    log(cmd='test', outcome='ok')
+    return 0
+
+
+def cmd_rollback(a):
+    preflight()
+    with locks():
+        snaps = snapshots()
+        if a.to and a.to not in snaps:
+            raise Bad('no such snapshot (see: hindsight-llm history)')
+        if not snaps:
+            raise Bad('no snapshots to roll back to')
+        target = f'{HIST}/{a.to or snaps[-1]}'
+        snapshot('rollback', container_env())   # so that rolling back again undoes this rollback
+        say(f'rolling back to snapshot {os.path.basename(target)}')
+        try:
+            restore(target)
+        except (Fail, OSError, ValueError, KeyError) as e:
+            loud_rollback_failure(target, e)
+            log(cmd='rollback', outcome='ROLLBACK FAILED', to=os.path.basename(target))
+            return 4
+    say('rollback done, service healthy; verify with: hindsight-llm test')
+    log(cmd='rollback', outcome='ok', to=os.path.basename(target))
+    return 0
+
+
+def check_config(new, key):
+    rc, out, _ = compose('config', '--format', 'json')
+    try:
+        env = json.loads(out)['services']['hindsight']['environment']
+    except (ValueError, KeyError, TypeError):
+        raise Fail('docker compose config rejected the override')
+    want = {V(v): new[n] for n, v in FIELDS}
+    want[V('API_KEY')] = key
+    bad = [k for k, v in want.items() if str((env or {}).get(k, '')) != v]
+    if bad:
+        raise Fail('compose does not apply the override for: ' + ', '.join(bad) + ' (is the hindsight environment in compose.yaml a list?)')
+
+
+def cmd_set(a):
+    env = container_env()
+    new = resolve(a, env)
+    key = read_key(a, env)
+    old = {n: (env or {}).get(V(v), '') for n, v in FIELDS}
+    say('hindsight-llm set' + (' (APPLY)' if a.yes else ' (dry run)') + '; the key is never shown')
+    for n, _ in FIELDS:
+        o, nw = old[n] or '(unset)', new[n] or '(provider default)'
+        show = (lambda x: x if n != 'base_url' else safe_url('' if x.startswith('(') else x))
+        say(f'  {n:<14} {show(o)}  ->  {show(nw)}' if o != nw else f'  {n:<14} {show(o)}  (unchanged)')
+    say(f'  api_key        {"kept (existing key)" if a.keep_key else "new key"}, length {len(key)}')
+    if env is None:
+        say('  note: container not found; it will be created')
+    if env and any(PEROP.match(x) for x in env):
+        say('WARNING: per-operation overrides exist in the running container and keep winning for those operations: '
+            + ', '.join(sorted(x for x in env if PEROP.match(x))))
+    say(f'would write {OVERRIDE}:', *['    ' + ln for ln in override_text(new).splitlines()],
+        f"would write {LLM_ENV} (mode 0600): {KEYVAR}='****' (length {len(key)})",
+        f'would snapshot the current state to {HIST}/<UTC stamp>/ (mode 700)',
+        f'would run: {compose_cmdline()}', f'then wait for {API}/health and run the canary (probe on bank {BANK} + scratch-bank round trip); on any failure: automatic rollback')
+    if not a.yes:
+        say('DRY RUN: nothing was changed. Add --yes to apply.')
+        return 0
+    preflight()
+    log(cmd='set', provider=new['provider'], model=new['model'], host=host_of(new['base_url']))
+    with locks():
+        d = snapshot('set', env)
+        try:
+            if not (a.keep_key and dotenv_raw(LLM_ENV) == f"{KEYVAR}='{key}'"):
+                write(LLM_ENV, envfile_text(key), 0o600)
+            write(OVERRIDE, override_text(new), 0o644)
+            check_config(new, key)
+            rc, _, err = compose('up', '-d', '--no-deps', 'hindsight')
+            if rc:
+                raise Fail('docker compose up failed: ' + red(err.strip()[-300:]))
+            wait_health()
+            canary()
+        except (Exception, KeyboardInterrupt) as e:
+            say(f'FAILED: {e}', err=True)
+            say(f'rolling back to the snapshot {os.path.basename(d)} ...', err=True)
+            try:
+                restore(d)
+            except (Fail, OSError, ValueError, KeyError) as e2:
+                loud_rollback_failure(d, e2)
+                log(cmd='set', outcome='ROLLBACK FAILED', provider=new['provider'], model=new['model'], why=e)
+                return 4
+            say('rolled back: the previous LLM settings are active again and healthy.', err=True)
+            log(cmd='set', outcome='rolled back', provider=new['provider'], model=new['model'], why=e)
+            return 1
+    say(f"DONE: hindsight now uses provider={new['provider']} model={new['model']} host={host_of(new['base_url'])}; snapshot {os.path.basename(d)}")
+    log(cmd='set', outcome='ok', provider=new['provider'], model=new['model'], host=host_of(new['base_url']), snapshot=os.path.basename(d))
+    return 0
+
+
+class Parser(argparse.ArgumentParser):
+    def error(self, m):  # argparse echoes unknown arguments; one of them could be a pasted secret
+        print('usage error: ' + ('unrecognized arguments (not shown)' if 'unrecognized' in m else m), file=sys.stderr)
+        sys.exit(2)
+
+
+def main(argv):
+    ap = Parser(prog='hindsight-llm', allow_abbrev=False)
+    sub = ap.add_subparsers(dest='cmd', required=True, parser_class=lambda **k: Parser(allow_abbrev=False, **k))
+    for n in ('show', 'presets', 'history', 'test'):
+        sub.add_parser(n)
+    sub.add_parser('rollback').add_argument('--to')
+    s = sub.add_parser('set')
+    for f in ('--provider', '--model', '--base-url', '--preset', '--timeout', '--max-concurrent', '--max-retries'):
+        s.add_argument(f)
+    for f in ('--yes', '--allow-insecure-url', '--provider-unlisted'):
+        s.add_argument(f, action='store_true')
+    g = s.add_mutually_exclusive_group(required=True)
+    g.add_argument('--key-stdin', action='store_true')
+    g.add_argument('--key-file')
+    g.add_argument('--keep-key', action='store_true')
+    a = ap.parse_args(argv)
+    try:
+        return globals()['cmd_' + a.cmd](a)
+    except Bad as e:
+        say('error: ' + str(e), err=True)
+        return 2
+    except Refuse as e:
+        say('refused: ' + str(e), err=True)
+        log(cmd=a.cmd, outcome='refused', why=e)
+        return 3
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))
