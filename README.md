@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="web/public/favicon.svg" width="96" height="96" alt="Cammut logo">
+</p>
+
 # Cammut
 
 Cammut gives every AI agent one shared memory and one door to its tools. You register your MCP servers once, give each agent a scoped token, and each agent reaches everything through one endpoint with four small tools: `cammut_servers`, `cammut_search`, `cammut_describe` and `cammut_call`.
