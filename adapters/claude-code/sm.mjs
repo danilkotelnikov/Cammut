@@ -252,9 +252,11 @@ function pruneFailed(cfg) {
   } catch { /* none yet */ }
 }
 
+let enqueueSeq = 0;
 export function enqueue(cfg, it) {
   const dir = ensure(spoolDir(cfg));
-  const name = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}.json`;
+  // the counter keeps arrival order inside one millisecond, so "oldest" in the overflow below is really the oldest
+  const name = `${Date.now()}-${String(enqueueSeq++).padStart(6, '0')}-${crypto.randomBytes(4).toString('hex')}.json`;
   atomicWrite(path.join(dir, name), JSON.stringify({ done: {}, attempts: 0, createdAt: Date.now(), status: 'local_queued', ...it }));
   try {
     for (const old of spoolFiles(cfg).slice(0, -SPOOL_MAX)) {
