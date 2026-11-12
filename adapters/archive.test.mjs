@@ -192,7 +192,7 @@ test('sessionIdOf and projectName derive stable, server-valid names from paths',
   assert.equal(sessionIdOf('claude-code', 'C:\\Users\\u\\.claude\\projects\\C--x\\0a1b2c3d-1111-2222-3333-444455556666.jsonl'), '0a1b2c3d-1111-2222-3333-444455556666');
   assert.equal(sessionIdOf('codex', '/h/.codex/sessions/2026/10/11/rollout-2026-10-11T10-00-00-0a1b2c3d-1111-2222-3333-444455556666.jsonl'), '0a1b2c3d-1111-2222-3333-444455556666');
   assert.match(sessionIdOf('codex', '/h/rollout-odd name!.jsonl'), /^[A-Za-z0-9_-]{1,80}$/);
-  assert.equal(projectName('C:/Users/alice/Documents/Cammut'), 'Cammut');
+  assert.equal(projectName('C:/Users/you/Documents/Cammut'), 'Cammut');
   assert.equal(projectName('/x/my project (2)'), 'my_project__2_');
   assert.equal(projectName(''), 'unknown');
   assert.equal(projectName('/x/' + 'a'.repeat(100)).length, 64);

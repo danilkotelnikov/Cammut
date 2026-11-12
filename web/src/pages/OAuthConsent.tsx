@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom"
 import { Button } from "@heroui/react"
 import { api, ApiError, type OAuthRequest } from "../api"
 import { Banner } from "../components/Banner"
-import { Wordmark } from "../brand/Mark"
+import { Wordmark } from "../brand/AsCube"
 
 /** The owner answers an app's request to connect. The app's one-time code travels only in the address this page sends the browser to. */
 export function OAuthConsent() {

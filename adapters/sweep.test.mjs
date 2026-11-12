@@ -564,7 +564,7 @@ test('sweepMain without --yes is a dry run that prints the preflight first and w
   assert.ok(!e.files.every((f) => fs.existsSync(f)), 'with everything verified the unattended --yes run does quarantine');
 });
 
-// ---- findings of the independent review (Astra, 2026-10-11) ----------------------------------------------------------------------
+// ---- findings of the independent review (2026-10-11) ----------------------------------------------------------------------
 
 test('a time in the future is never fresh: replica, audit and dry-run records must lie in the past', () => {
   const future = NOW + 3 * DAY;

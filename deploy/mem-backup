@@ -2,7 +2,7 @@
 # mem-backup: nightly age-encrypted copy of the memory volumes (replaces the unencrypted tar|zstd script).
 #   mem-backup               stop hindsight+openviking, write <volume>-<UTC stamp>.tar.zst.age for each volume, restart, prune
 #   mem-backup --dry-run     print what would run; changes nothing
-#   mem-backup --verify FILE check that FILE starts with an age header (the server cannot decrypt: it has no private key)
+#   mem-backup --verify FILE check that FILE starts with an age header (the VDS cannot decrypt: it has no private key)
 # Fails closed: without a valid recipients file (public keys only, mode 0600) or without age/zstd/docker it exits 3
 # BEFORE stopping anything and writes nothing. Each output is written as *.part and renamed only when the whole
 # tar | zstd | age pipeline succeeded, so a truncated file never looks complete. Old unencrypted *.tar.zst files are never touched.

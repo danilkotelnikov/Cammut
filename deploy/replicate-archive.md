@@ -1,7 +1,7 @@
 # Offsite replica of the encrypted archive
 
 The archive (`/data/archive` in the `cammut_cammut-data` volume) is age ciphertext, so it may be copied anywhere. Because the PC deletes its
-transcripts after they are archived, a lost server would lose them unless a copy exists elsewhere. **The retention sweeper refuses to run
+transcripts after they are archived, a lost VDS would lose them unless a copy exists elsewhere. **The retention sweeper refuses to run
 without a verified replica of each segment it relies on** (`no-replica`, `replica-stale`, `not-replicated`), so this is a precondition, not a courtesy.
 
 `deploy/replicate-archive REMOTE:PATH` does four things:
@@ -22,13 +22,13 @@ segment (remote unreachable): **nothing is recorded**, so a failed run never mak
 ## Set up (you do this; nothing here is automated)
 
 ```
-apt-get install -y rclone                 # on the server
+apt-get install -y rclone                 # on the VDS
 rclone config                             # create a remote you own, e.g. "mega" or a Google Drive remote; the files are already encrypted
 bash /opt/cammut/deploy/replicate-archive mega:cammut-archive      # once by hand; read: verified=N unreplicated=0
 docker exec cammut-cammut-1 /cammut archive stats             # "replica  last run ..., unreplicated 0"
 ```
 
-Daily by a systemd timer (as root on the server):
+Daily by a systemd timer (as root on the VDS):
 
 `/etc/systemd/system/cammut-replicate.service`
 ```
@@ -59,7 +59,7 @@ A failed run (`exit 3`) shows up as `systemctl status cammut-replicate.service` 
 
 - A provider **volume snapshot** is a useful extra but cannot satisfy the precondition: it yields no per-segment verification.
 - `mem-backup` with `ARCHIVE_MODE=tar` keeps a second encrypted copy on the **same host**. That is not disaster recovery and not a replica.
-- Restoring after server loss: copy the ciphertext back from the remote into a fresh `archive/` directory; with the private key (`cammut-archive.mjs decrypt`
+- Restoring after VDS loss: copy the ciphertext back from the remote into a fresh `archive/` directory; with the private key (`cammut-archive.mjs decrypt`
   or plain `age -d -i key` plus any zstd tool) every segment is readable without any Cammut software. The sqlite index is rebuilt from the database
   backup (`cammut_cammut-data` snapshot in `mem-backup`).
 

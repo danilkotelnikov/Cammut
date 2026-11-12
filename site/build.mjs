@@ -1,4 +1,4 @@
-// Static site generator for example. Markdown (content/docs) + hand-written pages (src/pages) -> dist/.
+// Static site generator for the Cammut site. Markdown (content/docs) + hand-written pages (src/pages) -> dist/.
 // No client framework: the output is plain HTML, one stylesheet, and two tiny scripts.
 import { readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, copyFileSync, existsSync } from "node:fs"
 import { join, dirname } from "node:path"
@@ -7,7 +7,7 @@ import { Marked } from "marked"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const out = join(root, "dist")
-const ORIGIN = "https://example"
+const ORIGIN = process.env.SITE_ORIGIN || "https://example.com"
 const cfg = JSON.parse(readFileSync(join(root, "site.json"), "utf8"))
 const versions = JSON.parse(readFileSync(join(root, "versions.json"), "utf8"))
 

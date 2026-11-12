@@ -3,7 +3,7 @@ services:
   cammut:
     build: ..
     image: cammut:0.4.0
-    network_mode: host            # reaches Hindsight/OpenViking on the server loopback; listens on loopback only
+    network_mode: host            # reaches Hindsight/OpenViking on the VDS loopback; listens on loopback only
     restart: unless-stopped
     command:
       - serve

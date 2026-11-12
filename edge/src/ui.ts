@@ -100,15 +100,31 @@ export function html(env: { APPWRITE_ENDPOINT: string }, title: string, body: st
   return new Response(doc, { status: o.status ?? 200, headers: h });
 }
 
-export function signInPage(env: { APPWRITE_ENDPOINT: string }, urls: { github: string; google: string }, heading: string, extraHeaders?: HeadersInit) {
+export function signInPage(env: { APPWRITE_ENDPOINT: string }, urls: { github: string; google?: string }, heading: string, extraHeaders?: HeadersInit) {
   return html(
     env,
     "Sign in",
     `<main class="card"><div class="head">${cube(56)}<h1>${esc(heading)}</h1></div>
 <p class="muted">Use the account you already have.</p>
 <a class="btn primary lg" href="${esc(urls.github)}">${GH}Continue with GitHub</a>
-<a class="btn lg" href="${esc(urls.google)}">${GOOGLE}Continue with Google</a>
+${urls.google ? `<a class="btn lg" href="${esc(urls.google)}">${GOOGLE}Continue with Google</a>` : ""}
 <p class="fine">Only the owner of this server can continue.</p></main>`,
+    { headers: extraHeaders },
+  );
+}
+
+/**
+ * After the consent form: a page that moves on to the app. A redirect answering the form POST falls under
+ * form-action for every hop, and some relays (Gemini's oauth-redirect.googleusercontent.com) hop on to hosts
+ * we cannot list, so the browser drops the code and the app never calls /token. A meta refresh is a new
+ * navigation, not a form submission.
+ */
+export function handoffPage(env: { APPWRITE_ENDPOINT: string }, to: string, extraHeaders?: HeadersInit) {
+  const u = esc(to);
+  return html(
+    env,
+    "Returning to the app",
+    `<meta http-equiv="refresh" content="0;url=${u}"><main class="card"><div class="head">${cube(44)}<h1>Returning to the app</h1></div><p class="muted">If nothing happens, <a href="${u}">continue</a>.</p></main>`,
     { headers: extraHeaders },
   );
 }

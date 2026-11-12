@@ -6,7 +6,7 @@ import { useAuth } from "../auth"
 import { Banner } from "../components/Banner"
 import { Scene, usePaletteVars } from "../components/Scene"
 import { CubeCluster } from "../components/CubeCluster"
-import { Wordmark } from "../brand/Mark"
+import { Wordmark } from "../brand/AsCube"
 import { takeNext } from "../next"
 
 export function explain(e: unknown): string {

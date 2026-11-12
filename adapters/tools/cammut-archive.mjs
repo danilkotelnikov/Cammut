@@ -232,7 +232,7 @@ export async function status(cfg, o = {}) {
     res.server = s;
     write(`server: segments=${s.segments} cipher=${fmt(s.cipher_bytes)} sessions=${s.sessions} free=${fmt(s.free_bytes)} of quota ${fmt(s.max_bytes)}`);
     write(`replica: last run ${s.replica?.last_run_at || 'never'}, replicated=${s.replica?.replicated} unreplicated=${s.replica?.unreplicated} oldest unreplicated age=${Math.round((s.replica?.oldest_unreplicated_age_s || 0) / 3600)}h`);
-    for (const ch of s.recipient_changes || []) write(`RECIPIENT CHANGE flagged for project ${ch.project} at ${ch.changed_at}; acknowledge on the server with: cammut archive pins ack -project ${ch.project}`);
+    for (const ch of s.recipient_changes || []) write(`RECIPIENT CHANGE flagged for project ${ch.project} at ${ch.changed_at}; acknowledge on the VDS with: cammut archive pins ack -project ${ch.project}`);
   } else write(`server: not reachable or not allowed (status ${r.status || r.error}); the read token needs archive/list`);
   const box = outboxStats(cfg);
   write(`outbox: ${box.count} segments, ${fmt(box.bytes)}, failed ${box.failed}`);
@@ -454,7 +454,7 @@ export async function pins(cfg, o = {}) {
   if (!r.ok) { write(`pins: server answered ${r.status || r.error}`); return { ok: false }; }
   const ch = r.json.recipient_changes || [];
   if (!ch.length) write('no recipient change flagged');
-  for (const x of ch) write(`${x.project}: pinned ${x.pinned} now ${x.now} (changed ${x.changed_at}); acknowledge on the server: cammut archive pins ack -project ${x.project}`);
+  for (const x of ch) write(`${x.project}: pinned ${x.pinned} now ${x.now} (changed ${x.changed_at}); acknowledge on the VDS: cammut archive pins ack -project ${x.project}`);
   return { ok: true, changes: ch.length };
 }
 

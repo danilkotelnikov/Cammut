@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom"
 import { useAuth } from "../auth"
-import { Mark, Wordmark } from "../brand/Mark"
+import { AsCube, Wordmark } from "../brand/AsCube"
 import { toggleTheme, currentTheme } from "../theme"
 import { CommandPalette, type Command } from "./CommandPalette"
 import { PICTURE_EVENT, Scene, SHUFFLE_EVENT } from "./Scene"
@@ -129,7 +129,7 @@ export function Layout() {
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b px-4 py-2.5 md:hidden" style={{ background: "var(--cm-sidebar)", borderColor: "var(--cm-border)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
             <span className="flex items-center gap-2" style={{ color: "var(--logo-ink)" }}>
-              <Mark size={30} />
+              <AsCube size={30} />
               <span className="font-semibold tracking-tight">Cammut</span>
             </span>
             <span className="flex items-center gap-1">

@@ -1,6 +1,6 @@
 # Cammut edge (staging Worker)
 
-A Cloudflare Worker that is the OAuth front door for AI apps (Claude, ChatGPT, Gemini, Composio). It runs as `cammut-edge-staging` on `mcp-staging.example`.
+A Cloudflare Worker that is the OAuth front door for AI apps (Claude, ChatGPT, Gemini, Composio). It runs as `cammut-edge-staging` on your own domain (this README uses `mcp.example.com`).
 
 What it does:
 
@@ -26,7 +26,7 @@ Scopes: `<server>/*` for every name in `MCP_SERVERS` ("Use tools on: <server>"),
 
 | Var | Meaning |
 |---|---|
-| `PUBLIC_ORIGIN` | `https://mcp-staging.example`. The resource is `PUBLIC_ORIGIN + /mcp`, exactly. |
+| `PUBLIC_ORIGIN` | `https://mcp.example.com`. The resource is `PUBLIC_ORIGIN + /mcp`, exactly. |
 | `EDGE_AUD`, `EDGE_KID` | `aud` claim and `kid` header of the pass. |
 | `APPWRITE_ENDPOINT`, `APPWRITE_PROJECT_ID` | Regional Appwrite endpoint and project. |
 | `ALLOWED_GITHUB_IDS` | Comma list of GitHub numeric ids that may sign in. |
@@ -46,10 +46,10 @@ KV binding: `OAUTH_KV` (the id in `wrangler.jsonc` is a placeholder).
 
 ## Appwrite setup it expects
 
-- Project `your-appwrite-project`, GitHub and Google OAuth providers enabled.
-- `mcp-staging.example` added as a Web platform (otherwise Appwrite refuses the success URL).
+- Project `your-appwrite-project-id`, GitHub and Google OAuth providers enabled.
+- `mcp.example.com` added as a Web platform (otherwise Appwrite refuses the success URL).
 - Sign-in redirect (token flow), as a browser link:
-  `{APPWRITE_ENDPOINT}/account/tokens/oauth2/{github|google}?project={APPWRITE_PROJECT_ID}&success=https://mcp-staging.example/auth/callback&failure=https://mcp-staging.example/auth/failed&state={random per flow}` plus `scopes[]=read:user` for GitHub only (URL-encoded).
+  `{APPWRITE_ENDPOINT}/account/tokens/oauth2/{github|google}?project={APPWRITE_PROJECT_ID}&success=https://mcp.example.com/auth/callback&failure=https://mcp.example.com/auth/failed&state={random per flow}` plus `scopes[]=read:user` for GitHub only (URL-encoded).
 - Appwrite returns `userId`, `secret` and the same `state` on the success URL. The callback first checks `state` against the flow record (400 if missing or different, before any Appwrite call), in addition to the `__Host-` cookie.
 - Then it exchanges at once (`POST /account/sessions/token`; the secret lives about 60 seconds), reads `GET /account/identities` with the session, and deletes the session.
 - With `APPWRITE_API_KEY` set: the exchange carries `X-Appwrite-Key`, the plain session secret is taken from the JSON `secret`, and the session is deleted with `DELETE /users/{userId}/sessions/{sessionId}` (key). Without it: the secret is taken from the `a_session_<project>` Set-Cookie and the session is deleted with `DELETE /account/sessions/current`.
@@ -71,8 +71,8 @@ Tests mock Appwrite and the origin on `fetch`; no network.
 1. `cd edge && npm install`, then `npx wrangler login`.
 2. Create the KV namespace: `npx wrangler kv namespace create OAUTH_KV`. Paste the printed id into `kv_namespaces[0].id` in `wrangler.jsonc` in place of `REPLACE_WITH_KV_ID`.
 3. Make the signing key: `node scripts/keygen.mjs`. It writes `edge-signing-key.txt` (git-ignored) and prints two lines. Give the first line (`edge-1=...`) to Cammut as its edge public key flag. Run the second line (`npx wrangler secret put EDGE_SIGNING_KEY < edge-signing-key.txt`). Then move the key file somewhere safe.
-4. In the Appwrite console (project `your-appwrite-project`) create an API key with exactly these scopes: `sessions.write` (the token exchange) and `users.write` (delete the session through `/users/{id}/sessions/{id}`). Nothing else; identities are read with the user's own session. Then `npx wrangler secret put APPWRITE_API_KEY`.
+4. In the Appwrite console (project `your-appwrite-project-id`) create an API key with exactly these scopes: `sessions.write` (the token exchange) and `users.write` (delete the session through `/users/{id}/sessions/{id}`). Nothing else; identities are read with the user's own session. Then `npx wrangler secret put APPWRITE_API_KEY`.
 5. Put the Access service token in: `npx wrangler secret put CF_ACCESS_CLIENT_ID` and `npx wrangler secret put CF_ACCESS_CLIENT_SECRET` (paste the values when asked).
-6. Check `vars` in `wrangler.jsonc` (allowed ids, `MCP_SERVERS`, `ORIGIN_URL`), then `npx wrangler deploy`. The custom domain `mcp-staging.example` must belong to a zone in your Cloudflare account.
+6. Check `vars` in `wrangler.jsonc` (allowed ids, `MCP_SERVERS`, `ORIGIN_URL`), then `npx wrangler deploy`. The custom domain `mcp.example.com` must belong to a zone in your Cloudflare account.
 
-After deploy, open `https://mcp-staging.example/admin/clients`, sign in, and create the Gemini client there.
+After deploy, open `https://mcp.example.com/admin/clients`, sign in, and create the Gemini client there.

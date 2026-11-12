@@ -1,6 +1,6 @@
 # mem-backup: encrypted nightly backup of the memory volumes
 
-`deploy/mem-backup` replaces `/usr/local/bin/mem-backup` on the server. The nightly job (01:10 UTC) keeps calling the same path.
+`deploy/mem-backup` replaces `/usr/local/bin/mem-backup` on the VDS. The nightly job (01:10 UTC) keeps calling the same path.
 
 What it does, in order:
 
@@ -11,15 +11,15 @@ What it does, in order:
 4. If every volume succeeded, deletes `*.tar.zst.age` older than 14 days. It never deletes the old unencrypted `*.tar.zst` files (you remove them yourself, see step 8 below).
 5. Prints the size of each new file.
 
-Other forms: `mem-backup --dry-run` prints the commands and changes nothing; `mem-backup --verify FILE` checks the age header (the server cannot decrypt: it has no private key).
+Other forms: `mem-backup --dry-run` prints the commands and changes nothing; `mem-backup --verify FILE` checks the age header (the VDS cannot decrypt: it has no private key).
 
 The Hindsight image is used for all three `tar` runs (the Cammut image is distroless and has no `tar`). The image name is read from the stopped Hindsight container; set `MEM_BACKUP_IMG` to override.
 
 ## The one rule about keys
 
-The private key never goes to the server. Only public keys are in `backup-recipients.txt`; the script refuses a file that contains anything else (and does not print the offending line). The same file is reused for the archive of plan 2.
+The private key never goes to the VDS. Only public keys are in `backup-recipients.txt`; the script refuses a file that contains anything else (and does not print the offending line). The same file is reused for the archive of plan 2.
 
-## Install on the server (run by the user)
+## Install on the VDS (run by the user)
 
 Before replacing the script, read the current one (this script was written without access to it): `cat /usr/local/bin/mem-backup`, and check that the volume names and the compose invocation match (`docker volume ls`).
 
@@ -52,4 +52,4 @@ age -d -i %USERPROFILE%\.age\memory.key.age FILE | zstd -d | tar -xf - -C restor
 
 ## Tests
 
-`node --test deploy/mem-backup.test.mjs` runs the script with stub `age`, `zstd` and `docker` commands (variables `MEM_BACKUP_AGE`, `MEM_BACKUP_ZSTD`, `MEM_BACKUP_DOCKER`, `MEM_BACKUP_DIR`, `MEM_BACKUP_RECIPIENTS`, `MEM_BACKUP_COMPOSE_DIR`, `MEM_BACKUP_IMG`). `MEM_BACKUP_SKIP_MODE_CHECK=1` disables only the mode-0600 check on filesystems without POSIX modes (the tests on Windows); never set it on the server.
+`node --test deploy/mem-backup.test.mjs` runs the script with stub `age`, `zstd` and `docker` commands (variables `MEM_BACKUP_AGE`, `MEM_BACKUP_ZSTD`, `MEM_BACKUP_DOCKER`, `MEM_BACKUP_DIR`, `MEM_BACKUP_RECIPIENTS`, `MEM_BACKUP_COMPOSE_DIR`, `MEM_BACKUP_IMG`). `MEM_BACKUP_SKIP_MODE_CHECK=1` disables only the mode-0600 check on filesystems without POSIX modes (the tests on Windows); never set it on the VDS.

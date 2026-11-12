@@ -7,7 +7,7 @@ Node-only tooling for the memory plugins on the PC. No Go, no dependencies.
 | `claude-code/` | Canonical source of the Claude Code hook adapter (`sm.mjs`), its tests and README. |
 | `common.mjs`, `archive.mjs` | Shared library: configuration, Cammut client, redaction, atomic writes; encrypted raw archive (segments, outbox, upload). |
 | `install.mjs` | Copies the files of its manifest into the flat directory `~/.claude/scripts/shared-memory` (override with `SM_INSTALL_DIR`). |
-| `tools/` | Verification and maintenance tools (Hindsight no-text, OpenViking purge, snapshot, chain doctor). |
+| `tools/` | Verification and maintenance tools (Hindsight no-text, chain doctor, archive, hooks installer). |
 | `test-helpers.mjs` | Fake HTTP servers shared by the tests. |
 | `claude-code/e2e.test.mjs` | Runs the real hook entry point as a child process against fake servers. |
 

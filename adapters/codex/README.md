@@ -22,14 +22,14 @@ Installed by `node adapters/install.mjs` as `~/.claude/scripts/shared-memory/cod
 
 ## Hooks to merge (you do this once, by hand)
 Add these entries to `~/.codex/hooks.json`, in the same shape your existing entries use (event name, then a list of command
-hooks), and trust them once in Codex with `/hooks`. Adjust the node path to yours.
+hooks), and trust them once in Codex with `/hooks`. Replace `<install dir>` with the folder where you installed the adapter, and adjust the node path to yours.
 
 | Event | Command | Why |
 |---|---|---|
-| `SessionStart` | `node "Example-host<you>\.claude\scripts\shared-memory\codex\cm.mjs" recall` | inject the project brief |
+| `SessionStart` | `node "<install dir>\codex\cm.mjs" recall` | inject the project brief |
 | `UserPromptSubmit` | `node "...\codex\cm.mjs" recall` | recall relevant notes and check for brief updates |
 | `SubagentStart` | `node "...\codex\cm.mjs" recall` | give a spawned agent the brief (and a recall by its task when the payload names it) |
-| `Stop` | `node "Example-host<you>\.claude\scripts\shared-memory\codex\cm.mjs" capture` | after every turn: note the rollout, start the drain |
+| `Stop` | `node "<install dir>\codex\cm.mjs" capture` | after every turn: note the rollout, start the drain |
 | `PreCompact` | `node "...\codex\cm.mjs" capture --flush` | cut the tail before context is compacted |
 | `SessionEnd` | `node "...\codex\cm.mjs" capture --flush` | Codex allows this hook about 1 s: it only records and spawns the drain |
 

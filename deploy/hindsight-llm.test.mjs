@@ -283,7 +283,7 @@ t('apply: snapshot, key file, override, config check, recreate only hindsight, h
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.equal(fs.readFileSync(s.P.override, 'utf8'), OVERRIDE_A());
   assert.equal(fs.readFileSync(s.P.keyfile, 'utf8'), `# Written by hindsight-llm (mode 0600). Read only through compose.llm.yaml.\nHINDSIGHT_LLM_API_KEY='${KEY1}'\n`);
-  assert.deepEqual(s.seq(), ['inspect env', 'inspect image', 'compose config', 'compose up', 'GET /health', 'POST /v1/default/banks/alice-shared/health/llm',
+  assert.deepEqual(s.seq(), ['inspect env', 'inspect image', 'compose config', 'compose up', 'GET /health', 'POST /v1/default/banks/default/health/llm',
     'PUT /v1/default/banks/llm-canary-N', 'POST /v1/default/banks/llm-canary-N/memories', 'POST /v1/default/banks/llm-canary-N/memories/recall', 'DELETE /v1/default/banks/llm-canary-N']);
   const up = s.calls().find((c) => c.tool === 'docker' && c.argv.includes('up')).argv;
   assert.deepEqual(up, ['compose', '-p', 'shared-memory-pilot', '-f', 'compose.yaml', '-f', 'compose.4gb.yaml', '-f', 'compose.llm.yaml',

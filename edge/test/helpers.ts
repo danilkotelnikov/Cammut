@@ -3,7 +3,7 @@ import { vi } from "vitest";
 import worker from "../src/index.ts";
 import type { Env } from "../src/env.ts";
 
-export const ORIGIN = "https://mcp-staging.example";
+export const ORIGIN = "https://mcp.example.com";
 export const AW = "https://fra.cloud.appwrite.io/v1";
 export const CB = "https://client.example/cb";
 
@@ -16,6 +16,7 @@ export interface Harness {
   publicKey: CryptoKey;
   aw: { calls: string[]; identities: unknown[]; tokenStatus: number; secretIn: "body" | "cookie"; keys: (string | null)[] };
   origin: { requests: { url: string; init: RequestInit }[]; reply: () => Response };
+  gh: { id: number; calls: string[] };
   call: (req: Request) => Promise<Response>;
 }
 
@@ -27,16 +28,18 @@ export async function harness(over: Partial<Env> = {}): Promise<Harness> {
     EDGE_SIGNING_KEY: b64((await crypto.subtle.exportKey("pkcs8", pair.privateKey)) as ArrayBuffer),
     CF_ACCESS_CLIENT_ID: "cid",
     CF_ACCESS_CLIENT_SECRET: "csecret",
+    GITHUB_CLIENT_ID: undefined, // Appwrite path unless a test turns direct GitHub on
     ...over,
   } as Env;
 
   const aw: Harness["aw"] = {
     calls: [],
-    identities: [{ provider: "github", providerUid: "12345", providerEmail: "o@example.com" }],
+    identities: [{ provider: "github", providerUid: "1234567", providerEmail: "o@example.com" }],
     tokenStatus: 201,
     secretIn: "body",
     keys: [],
   };
+  const gh: Harness["gh"] = { id: 1234567, calls: [] };
   const origin: Harness["origin"] = {
     requests: [],
     reply: () => Response.json({ jsonrpc: "2.0", id: 1, result: {} }),
@@ -55,7 +58,7 @@ export async function harness(over: Partial<Env> = {}): Promise<Harness> {
           ? Response.json({ $id: "sess1", userId: "u1", secret: "SESSION-SECRET" }, { status: 201 })
           : new Response(JSON.stringify({ $id: "sess1" }), {
               status: 201,
-              headers: { "Set-Cookie": "a_session_your-appwrite-project=SESSION-SECRET; Path=/; HttpOnly" },
+              headers: { "Set-Cookie": "a_session_your-appwrite-project-id=SESSION-SECRET; Path=/; HttpOnly" },
             });
       }
       if (path === "/account/identities") {
@@ -67,7 +70,16 @@ export async function harness(over: Partial<Env> = {}): Promise<Harness> {
       if (path === "/users/u1/sessions/sess1" && method === "DELETE") return new Response(null, { status: 204 });
       return new Response("unexpected", { status: 500 });
     }
-    if (url.startsWith("https://origin-staging.example")) {
+    if (url === "https://github.com/login/oauth/access_token" && method === "POST") {
+      const b = JSON.parse(String(init.body));
+      gh.calls.push(`token ${b.code} ${b.client_secret} ${b.redirect_uri}`);
+      return b.code === "good" ? Response.json({ access_token: "GHTOKEN", token_type: "bearer" }) : Response.json({ error: "bad_verification_code" });
+    }
+    if (url === "https://api.github.com/user") {
+      gh.calls.push(`user ${new Headers(init.headers).get("Authorization")}`);
+      return Response.json({ id: gh.id, login: "someone" });
+    }
+    if (url.startsWith("https://origin.example.com")) {
       origin.requests.push({ url, init });
       return origin.reply();
     }
@@ -79,6 +91,7 @@ export async function harness(over: Partial<Env> = {}): Promise<Harness> {
     publicKey: pair.publicKey,
     aw,
     origin,
+    gh,
     call: async (req) => worker.fetch(req, env, createExecutionContext()),
   };
 }
@@ -164,7 +177,7 @@ export async function fullFlow(h: Harness, method: "none" | "client_secret_post"
   const { cookie, consent } = await toConsent(h, c.client_id, challenge);
   const csrf = await csrfOf(consent);
   const allow = await h.call(post("/auth/consent", { csrf, decision: "allow", scope: scopes }, cookie));
-  const loc = new URL(allow.headers.get("Location") ?? "about:blank");
+  const loc = new URL((await handoffTo(allow)) ?? "about:blank");
   const code = loc.searchParams.get("code") ?? "";
   const tok = await h.call(
     post("/token", {
@@ -179,4 +192,13 @@ export async function fullFlow(h: Harness, method: "none" | "client_secret_post"
   );
   const json = (await tok.json()) as { access_token: string; refresh_token: string; expires_in: number; scope: string };
   return { client: c, verifier, allow, loc, tok, json };
+}
+
+/** The URL the consent hand-off page moves on to (meta refresh and fallback link must agree). */
+export async function handoffTo(res: Response): Promise<string | null> {
+  const t = await res.clone().text();
+  const meta = /<meta http-equiv="refresh" content="0;url=([^"]+)">/.exec(t)?.[1];
+  const link = /<a href="([^"]+)">continue<\/a>/.exec(t)?.[1];
+  if (!meta || meta !== link) return null;
+  return meta.replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
 }

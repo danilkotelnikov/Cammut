@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CB, ORIGIN, authorizePath, b64u, cookiesOf, csrfOf, fullFlow, get, harness, pkce, post, register, stateOf, toConsent } from "./helpers.ts";
+import { CB, ORIGIN, authorizePath, b64u, cookiesOf, csrfOf, fullFlow, get, handoffTo, harness, pkce, post, register, stateOf, toConsent } from "./helpers.ts";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -23,13 +23,13 @@ describe("discovery", () => {
     const res = await h.call(new Request(hint));
     expect(res.status).toBe(200);
     const j = (await res.json()) as Record<string, any>;
-    expect(j.resource).toBe("https://mcp-staging.example/mcp");
+    expect(j.resource).toBe("https://mcp.example.com/mcp");
     expect(j.authorization_servers).toContain(ORIGIN);
     expect(j.scopes_supported).toContain("memory/remember");
     expect(j.bearer_methods_supported).toEqual(["header"]);
     // the bare well-known path answers the same
     const bare = (await (await h.call(get("/.well-known/oauth-protected-resource"))).json()) as Record<string, any>;
-    expect(bare.resource).toBe("https://mcp-staging.example/mcp");
+    expect(bare.resource).toBe("https://mcp.example.com/mcp");
   });
 });
 
@@ -73,10 +73,10 @@ describe("registration and PKCE", () => {
     expect(res.status).toBe(200);
     const text = await res.text();
     expect(text).toContain("Continue with GitHub");
-    expect(text).toContain("Continue with Google");
-    expect(text).toContain("/account/tokens/oauth2/github?project=your-appwrite-project");
-    expect(text).toContain(encodeURIComponent("https://mcp-staging.example/auth/callback"));
-    expect(text).toContain(encodeURIComponent("https://mcp-staging.example/auth/failed"));
+    expect(text).not.toContain("Continue with Google"); // no Google account allowed in the test env
+    expect(text).toContain("/account/tokens/oauth2/github?project=your-appwrite-project-id");
+    expect(text).toContain(encodeURIComponent("https://mcp.example.com/auth/callback"));
+    expect(text).toContain(encodeURIComponent("https://mcp.example.com/auth/failed"));
     const [cookie] = res.headers.getSetCookie();
     expect(cookie).toMatch(/^__Host-cammut-flow=[A-Za-z0-9_-]{40,};/);
     for (const flag of ["Secure", "HttpOnly", "SameSite=Lax", "Path=/"]) expect(cookie).toContain(flag);
@@ -221,8 +221,9 @@ describe("consent form", () => {
     const { challenge } = await pkce();
     const { cookie, consent } = await toConsent(h, body.client_id, challenge);
     const res = await h.call(post("/auth/consent", { csrf: await csrfOf(consent), decision: "deny" }, cookie));
-    expect(res.status).toBe(302);
-    const loc = new URL(res.headers.get("Location")!);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Location")).toBeNull(); // no redirect from the form POST (form-action, see handoffPage)
+    const loc = new URL((await handoffTo(res))!);
     expect(loc.origin + loc.pathname).toBe(CB);
     expect(loc.searchParams.get("error")).toBe("access_denied");
     expect(loc.searchParams.get("state")).toBe("client-state");
@@ -274,7 +275,7 @@ describe("tokens and /mcp", () => {
 
     expect(h.origin.requests).toHaveLength(1);
     const { url, init } = h.origin.requests[0];
-    expect(url).toBe("https://origin-staging.example/mcp?x=1");
+    expect(url).toBe("https://origin.example.com/mcp?x=1");
     expect(init.method).toBe("POST");
     expect(init.body).toBeInstanceOf(ReadableStream); // streamed, not buffered
     expect(await new Response(init.body as ReadableStream).text()).toBe(sent);
@@ -302,7 +303,7 @@ describe("tokens and /mcp", () => {
     expect(Object.keys(claims).sort()).toEqual(["aud", "cip", "exp", "grant", "iat", "iss", "jti", "scope", "sub"]);
     expect(claims.iss).toBe("cammut-edge");
     expect(claims.aud).toBe("cammut-staging");
-    expect(claims.sub).toBe("gh:12345");
+    expect(claims.sub).toBe("gh:1234567");
     expect(claims.grant).toBe(f.json.access_token.split(":")[1]);
     expect(claims.grant).toMatch(/^[A-Za-z0-9:_-]{1,128}$/);
     expect(claims.scope).toBe("github/* memory/brief");
@@ -394,7 +395,8 @@ describe("admin and manual client", () => {
     const { cookie, consent } = await toConsent(h, id, challenge);
     expect(await consent.clone().text()).toContain("Gemini wants to use");
     const allow = await h.call(post("/auth/consent", { csrf: await csrfOf(consent), decision: "allow", scope: "github/*" }, cookie));
-    const code = new URL(allow.headers.get("Location")!).searchParams.get("code")!;
+    expect(allow.status).toBe(200);
+    const code = new URL((await handoffTo(allow))!).searchParams.get("code")!;
     const bad = await h.call(post("/token", { grant_type: "authorization_code", code, redirect_uri: CB, client_id: id, client_secret: "wrong", code_verifier: verifier }));
     expect(bad.status).toBe(401);
     const tok = await h.call(post("/token", { grant_type: "authorization_code", code, redirect_uri: CB, client_id: id, client_secret: secret, code_verifier: verifier }));
@@ -413,5 +415,43 @@ describe("admin and manual client", () => {
     const { cookie } = await toConsent(h, body.client_id, challenge);
     const res = await h.call(get("/admin/clients", cookie));
     expect(await res.text()).toContain("Admin sign-in");
+  });
+});
+
+describe("direct GitHub sign-in", () => {
+  const GH = { GITHUB_CLIENT_ID: "Iv1.test", GITHUB_CLIENT_SECRET: "ghsecret" };
+
+  async function toGitHub(h: Awaited<ReturnType<typeof harness>>) {
+    const { body } = await register(h);
+    const { challenge } = await pkce();
+    const a = await h.call(get(authorizePath(body.client_id, { code_challenge: challenge, code_challenge_method: "S256" })));
+    const href = /href="(https:\/\/github\.com\/login\/oauth\/authorize[^"]+)"/.exec(await a.text())![1].replace(/&#38;/g, "&");
+    return { cookie: cookiesOf(a), u: new URL(href) };
+  }
+
+  it("sends GitHub straight to github.com and lands on consent for the allowed id", async () => {
+    const h = await harness(GH);
+    const { cookie, u } = await toGitHub(h);
+    expect(u.searchParams.get("client_id")).toBe("Iv1.test");
+    expect(u.searchParams.get("redirect_uri")).toBe(`${ORIGIN}/auth/github/callback`);
+    const cb = await h.call(get(`/auth/github/callback?code=good&state=${u.searchParams.get("state")}`, cookie));
+    expect(cb.status).toBe(303);
+    expect(cb.headers.get("Location")).toBe("/auth/consent");
+    expect(h.gh.calls).toEqual([`token good ghsecret ${ORIGIN}/auth/github/callback`, "user Bearer GHTOKEN"]);
+    expect(h.aw.calls).toHaveLength(0); // no Appwrite at all
+    const consent = await h.call(get("/auth/consent", cookiesOf(cb) || cookie));
+    expect(await consent.text()).toContain("GitHub user 1234567");
+  });
+
+  it("refuses a wrong state, a bad code and an id that is not on the list", async () => {
+    const h = await harness(GH);
+    const { cookie, u } = await toGitHub(h);
+    expect((await h.call(get("/auth/github/callback?code=good&state=nope", cookie))).status).toBe(400);
+    expect((await h.call(get(`/auth/github/callback?code=bad&state=${u.searchParams.get("state")}`, cookie))).status).toBe(400);
+
+    const h2 = await harness(GH);
+    h2.gh.id = 999;
+    const g = await toGitHub(h2);
+    expect((await h2.call(get(`/auth/github/callback?code=good&state=${g.u.searchParams.get("state")}`, g.cookie))).status).toBe(403);
   });
 });

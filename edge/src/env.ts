@@ -13,11 +13,15 @@ export interface Env {
   ALLOWED_GITHUB_IDS: string;
   ALLOWED_GOOGLE_EMAILS?: string;
   MCP_SERVERS: string;
+  /** Optional. When set, GitHub sign-in goes straight to GitHub (no Appwrite). */
+  GITHUB_CLIENT_ID?: string;
   ORIGIN_URL: string;
   // secrets (wrangler secret put)
   EDGE_SIGNING_KEY: string;
   /** Optional. With it the session exchange is made as an admin client and the session is deleted through /users. */
   APPWRITE_API_KEY?: string;
+  /** Secret of the GitHub OAuth App named by GITHUB_CLIENT_ID. */
+  GITHUB_CLIENT_SECRET?: string;
   /** Optional. Sent to the origin only when both are set (Cloudflare Access service token). */
   CF_ACCESS_CLIENT_ID?: string;
   CF_ACCESS_CLIENT_SECRET?: string;

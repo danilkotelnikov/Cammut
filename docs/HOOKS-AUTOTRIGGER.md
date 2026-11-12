@@ -55,7 +55,7 @@ Default behaviour is unchanged when neither is set.
   in this mode. Items the default mode queued earlier stay in `spool/` (not sent, not dropped) and drain after you switch back.
 - With a missing or rejected token the hooks fail open and the once-per-session unavailable line appears.
 - Gaps: Cammut has no journal store, so a `SubagentStop` report is written only when `hooks.subagentNotes` is on (a `finding` note, importance 1,
-  tags `epistemic:inferred`, `source:subagent`); the user tools in `adapters/tools/` (`hs-client.mjs`, `ov-client.mjs`, `chain-doctor.mjs`) are separate
+  tags `epistemic:inferred`, `source:subagent`); the user tools in `adapters/tools/` (`hs-client.mjs`, `chain-doctor.mjs`) are separate
   programs and still talk to the legacy services when you run them.
 
 ## 4. Subagents
@@ -111,7 +111,7 @@ node adapters\tools\install-hooks.mjs "$env:USERPROFILE\.claude\settings.json" -
 
 Optional `~/.claude/shared-memory.json` additions: `{"cammut": {"only": true}, "inject": {"maxHits": 3}, "hooks": {"subagentNotes": false}}`.
 
-## 8. Server-side Hindsight autotriggers (created 2026-10-17, bank `alice-shared`)
+## 8. Server-side Hindsight autotriggers (created 2026-10-17, bank `default`)
 
 Recorded from the order of 2026-10-17; this branch did not read them back (no call to the live Hindsight was made), so check them with
 `list_mental_models`, `list_directives` and `get_bank`.

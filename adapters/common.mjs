@@ -27,7 +27,7 @@ export function loadConfig(env = process.env) {
   const readTokenEnv = cm.readTokenEnv || 'CAMMUT_ARCHIVE_READ_TOKEN';
   return {
     stateDir: env.SM_STATE_DIR || path.join(os.homedir(), '.claude', 'state', 'shared-memory'),
-    hs: { url: env.SM_HS_URL || file.hindsight?.url || 'http://127.0.0.1:8888', bank: file.hindsight?.bank || 'alice-shared', key: env.SHARED_MEMORY_HINDSIGHT_API_KEY, capture: on(file.hindsight?.capture), recall: on(file.hindsight?.recall) },
+    hs: { url: env.SM_HS_URL || file.hindsight?.url || 'http://127.0.0.1:8888', bank: file.hindsight?.bank || 'default', key: env.SHARED_MEMORY_HINDSIGHT_API_KEY, capture: on(file.hindsight?.capture), recall: on(file.hindsight?.recall) },
     ov: { url: env.SM_OV_URL || file.openviking?.url || 'http://127.0.0.1:1933', key: env.SHARED_MEMORY_OPENVIKING_API_KEY, capture: file.openviking?.capture === true, recall: on(file.openviking?.recall) },
     cammut: {
       url: String(env.SM_CAMMUT_URL || cm.url || DEFAULT_CAMMUT_URL).replace(/\/+$/, ''),

@@ -23,7 +23,7 @@ reach any of it from the internet. **Forward only `/mcp` and `/healthz` at the p
 
 ## Exposure option A: Cloudflare Tunnel
 
-`cloudflared` runs on the server and dials out to Cloudflare, so no inbound port is opened and the origin stays on loopback. UNVERIFIED:
+`cloudflared` runs on the VDS and dials out to Cloudflare, so no inbound port is opened and the origin stays on loopback. UNVERIFIED:
 none of this was run.
 
 ```yaml
@@ -190,12 +190,12 @@ UNVERIFIED, needs the real service or a third party:
   path-regex ingress syntax; Caddy snippet.
 * Behaviour under real internet traffic: TLS, HTTP/2, a slow client, idle connections. The server's write timeout is 120 s
   (`cmd/cammut/wire.go`); a tool slower than that, or than the proxy's read timeout, fails.
-* The race detector (`-race`) was not run locally (no cgo toolchain on this machine); `dev/gate.sh` does it on the server and is for
+* The race detector (`-race`) was not run locally (no cgo toolchain on this machine); `dev/gate.sh` does it on the VDS and is for
   the user to run.
 
 ## Steps for the user, in order
 
-1. Buy `cammut.<tld>`; point it at Cloudflare (option A) or the server (option B).
+1. Buy `cammut.<tld>`; point it at Cloudflare (option A) or the VDS (option B).
 2. Set `CAMMUT_SITE_ORIGIN=https://cammut.<tld>`, deploy 0.3.0 (own backup, smoke and rollback), start the tunnel or Caddy with the
    path restriction.
 3. From outside: `GET https://cammut.<tld>/healthz` returns `ok`; `POST /mcp` without a token returns 401; `/api/v1/me` returns 404.

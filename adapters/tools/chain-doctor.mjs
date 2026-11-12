@@ -150,7 +150,7 @@ export async function diagnose({ env = process.env, home = os.homedir(), fetch: 
   }
   const hsUrl = cfg?.hs?.url || env.SM_HS_URL || file.hindsight?.url || 'http://127.0.0.1:8888';
   const ovUrl = cfg?.ov?.url || env.SM_OV_URL || file.openviking?.url || 'http://127.0.0.1:1933';
-  const bank = cfg?.hs?.bank || file.hindsight?.bank || 'alice-shared';
+  const bank = cfg?.hs?.bank || file.hindsight?.bank || 'default';
   const stateDir = cfg?.stateDir || env.SM_STATE_DIR || path.join(claude, 'state', 'shared-memory');
 
   // 4 reach: keys go only to Hindsight and OpenViking, never to Cammut or the public name
@@ -264,7 +264,7 @@ async function archiveChecks({ cfg, env, stateDir, claude, home, now, fetchFn, s
         const age = Number.isNaN(last) ? null : now - last;
         rows.push(row('archive:replica', age === null || age > 36 * 3600000 || st.replica.unreplicated > 0 ? 'WARN' : 'PASS', `last run ${age === null ? 'never' : `${hrs(age)} ago`}; replicated=${st.replica?.replicated} unreplicated=${st.replica?.unreplicated}; oldest unreplicated age=${Math.round((st.replica?.oldest_unreplicated_age_s || 0) / 3600)}h`));
         const ch = st.recipient_changes || [];
-        rows.push(row('archive:recipients', ch.length ? 'FAIL' : 'PASS', ch.length ? `recipient set changed for ${ch.map((c) => c.project).join(', ')}; acknowledge on the server: cammut archive pins ack -project NAME` : 'no recipient change flagged by the server'));
+        rows.push(row('archive:recipients', ch.length ? 'FAIL' : 'PASS', ch.length ? `recipient set changed for ${ch.map((c) => c.project).join(', ')}; acknowledge on the VDS: cammut archive pins ack -project NAME` : 'no recipient change flagged by the server'));
       }
     }
   }

@@ -1,14 +1,24 @@
 import { AuthorizationError, type AuthRequest, authorizationErrorRedirect } from "@cloudflare/workers-oauth-provider";
-import { identify, signInUrl } from "./appwrite.ts";
-import { type Env } from "./env.ts";
+import { type Identity, identify, signInUrl } from "./appwrite.ts";
+import { githubIdentify, githubSignInUrl } from "./github.ts";
+import { type Env, list } from "./env.ts";
 import {
   ADMIN_TTL, OAUTH_TTL, clearCookie, createFlow, csrfOk, stateOk, dropFlow, loadFlow, saveFlow, setCookie, type Flow,
 } from "./flow.ts";
 import { supportedScopes } from "./scopes.ts";
-import { PRODUCT, adminPage, consentPage, messagePage, signInPage } from "./ui.ts";
+import { PRODUCT, adminPage, consentPage, handoffPage, messagePage, signInPage } from "./ui.ts";
 
 const signIn = (env: Env, heading: string, cookie: string, state: string) =>
-  signInPage(env, { github: signInUrl(env, "github", state), google: signInUrl(env, "google", state) }, heading, { "Set-Cookie": cookie });
+  signInPage(
+    env,
+    {
+      github: env.GITHUB_CLIENT_ID ? githubSignInUrl(env, state) : signInUrl(env, "github", state),
+      // Google sign-in goes through Appwrite; offer it only when a Google account is allowed.
+      google: list(env.ALLOWED_GOOGLE_EMAILS).length ? signInUrl(env, "google", state) : undefined,
+    },
+    heading,
+    { "Set-Cookie": cookie },
+  );
 
 const redirect = (to: string, status: number, cookie?: string) =>
   new Response(null, { status, headers: cookie ? { Location: to, "Set-Cookie": cookie } : { Location: to } });
@@ -52,7 +62,22 @@ async function callback(request: Request, env: Env): Promise<Response> {
   }
 
   // First thing, before any page: the Appwrite secret lives about 60 seconds.
-  const who = await identify(env, userId, secret);
+  return finish(env, f, await identify(env, userId, secret));
+}
+
+async function githubCallback(request: Request, env: Env): Promise<Response> {
+  const f = await loadFlow(env, request);
+  if (!f) return expired(env);
+  const q = new URL(request.url).searchParams;
+  const code = q.get("code");
+  if (!code) return failed(request, env);
+  if (!stateOk(f.flow, q.get("state"))) {
+    return messagePage(env, 400, "Request not accepted", "The sign-in did not match this browser. Start again from the app.");
+  }
+  return finish(env, f, await githubIdentify(env, code));
+}
+
+async function finish(env: Env, f: { id: string; flow: Flow }, who: Identity | "denied" | null): Promise<Response> {
   if (who === null) {
     await dropFlow(env, f.id);
     return messagePage(env, 400, "Sign-in failed", "The sign-in could not be completed. Start again.", { "Set-Cookie": clearCookie() });
@@ -109,7 +134,7 @@ async function consent(request: Request, env: Env): Promise<Response> {
 
   if (form.get("decision") !== "allow") {
     await dropFlow(env, f.id);
-    return redirect(authorizationErrorRedirect(req, "access_denied"), 302, clearCookie());
+    return handoffPage(env, authorizationErrorRedirect(req, "access_denied"), { "Set-Cookie": clearCookie() });
   }
   const ok = offered(env, req);
   const scope = [...new Set(form.getAll("scope").map(String))].filter((s) => ok.includes(s));
@@ -124,7 +149,7 @@ async function consent(request: Request, env: Env): Promise<Response> {
     props: { sub, scope: scope.join(" ") },
   });
   await dropFlow(env, f.id);
-  return redirect(redirectTo, 302, clearCookie());
+  return handoffPage(env, redirectTo, { "Set-Cookie": clearCookie() });
 }
 
 // ---------- /admin/clients ----------
@@ -188,6 +213,7 @@ export default {
     const m = request.method;
     if (pathname === "/authorize" && m === "GET") return authorize(request, env);
     if (pathname === "/auth/callback" && m === "GET") return callback(request, env);
+    if (pathname === "/auth/github/callback" && m === "GET") return githubCallback(request, env);
     if (pathname === "/auth/failed" && m === "GET") return failed(request, env);
     if (pathname === "/auth/consent" && (m === "GET" || m === "POST")) return consent(request, env);
     if (pathname.startsWith("/admin/clients")) return admin(request, env, pathname);

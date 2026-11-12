@@ -47,7 +47,7 @@ func contentTerms(s string) []string {
 // characters) and Long for a long one (LongTerms words or more than LongChars characters). When the best note leads
 // the second best by LeadGap, that one note is admitted at tau - LeadRelax. When the best note is a clear match
 // (cosine at least DominantCos), notes with no lexical match whose cosine is under DominantFrac of it are not added.
-// Nothing drops below MinFloor. Calibrate on real data with the golden set the defaults
+// Nothing drops below MinFloor. Calibrate on real data with the golden set and docs/MEMORY-GATES.md; the defaults
 // suit a 384-dimension multilingual sentence model.
 type Gate struct {
 	Base, Short, Long              float64

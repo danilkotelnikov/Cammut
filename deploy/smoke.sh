@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run on the server: smoke-test the gateway. The token comes from $CAMMUT_TOKEN or stdin, never from argv.
+# Run on the VDS: smoke-test the gateway. The token comes from $CAMMUT_TOKEN or stdin, never from argv.
 set -euo pipefail
 TOK="${CAMMUT_TOKEN:-}"; [ -n "$TOK" ] || IFS= read -r TOK
 [ -n "$TOK" ] || { echo "usage: CAMMUT_TOKEN=... smoke.sh   (or pipe the token on stdin)"; exit 2; }

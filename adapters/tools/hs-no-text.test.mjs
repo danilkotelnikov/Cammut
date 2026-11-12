@@ -77,7 +77,7 @@ test('verify on a scratch bank passes when the override works, prints no raw tex
   assert.ok(retain.body.items[0].content.length >= 1200 && /MV2MARKER-[0-9a-f]+/.test(retain.body.items[0].content));
   assert.ok(!out.join('\n').includes('MV2MARKER'), 'the marker text must not be printed');
   assert.equal(fs_.calls.at(-1).method, 'DELETE', 'the scratch bank is deleted last');
-  assert.ok(fs_.calls.every((c) => c.url.includes(r.bank) && !c.url.includes('alice-shared')), 'only the scratch bank is touched');
+  assert.ok(fs_.calls.every((c) => c.url.includes(r.bank) && !c.url.includes('/banks/default')), 'only the scratch bank is touched');
   assert.equal(st.deleted, true);
   fs_.srv.close();
 });
@@ -106,7 +106,7 @@ test('apply refuses without --yes, writes only the two settings, and exits 2 wit
   assert.equal(s.calls.length, 0, 'nothing is sent without --yes');
   assert.equal(await apply({ hs: clientFor(s.url), yes: true, say: (x) => out.push(x) }), 0);
   const patch = s.calls.find((c) => c.method === 'PATCH');
-  assert.equal(patch.url, '/v1/default/banks/alice-shared/config');
+  assert.equal(patch.url, '/v1/default/banks/default/config');
   assert.deepEqual(patch.body, { updates: { store_document_text: false, recall_include_chunks: false } });
   assert.ok(out.some((l) => /overrides: .*store_document_text/.test(l)));
   s.srv.close();

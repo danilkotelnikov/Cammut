@@ -4,11 +4,11 @@
 
 ## USER STEPS (paste-ready)
 
-**1. Copy the script to the server and install it** (PowerShell on the PC, in the repo folder, then the server shell):
+**1. Copy the script to the VDS and install it** (PowerShell on the PC, in the repo folder, then the VDS shell):
 
 ```powershell
-scp -i $env:USERPROFILE\.ssh\id_ed25519 deploy\hindsight-llm root@your-host:/tmp/hindsight-llm
-ssh -i $env:USERPROFILE\.ssh\id_ed25519 root@your-host
+scp -i ~/.ssh/your_key deploy\hindsight-llm root@your-server:/tmp/hindsight-llm
+ssh -i ~/.ssh/your_key root@your-server
 ```
 
 ```bash
@@ -68,7 +68,7 @@ Drop `--yes` from any `set` to see the plan first. A key can also come from a fi
 4. `docker compose ... config --format json` must show the new values for the hindsight service (proves the override really merged; nothing is printed).
 5. `docker compose -p shared-memory-pilot -f compose.yaml -f compose.4gb.yaml -f compose.llm.yaml --env-file /root/private/shared-memory.env --env-file /root/private/hindsight-llm.env up -d --no-deps hindsight`.
 6. Waits for `GET /health` (up to 180 s).
-7. Canary: `POST /v1/default/banks/alice-shared/health/llm` (the `test_bank_llm` probe; read-only), then a scratch bank `llm-canary-<epoch>`: create, synchronous retain of one synthetic sentence, recall with a plain question, at least one fact must come back, then delete the bank (always, also on failure; one retry).
+7. Canary: `POST /v1/default/banks/default/health/llm` (the `test_bank_llm` probe; read-only), then a scratch bank `llm-canary-<epoch>`: create, synchronous retain of one synthetic sentence, recall with a plain question, at least one fact must come back, then delete the bank (always, also on failure; one retry).
 8. Any failure in steps 3 to 7 triggers the automatic rollback: files restored byte for byte from the snapshot (or removed if there was none), service recreated, health checked again, exit 1. If the rollback itself fails the tool prints `!!! ROLLBACK FAILED` with the manual commands and exits 4.
 
 Exit codes: 0 ok, 1 failed and rolled back (or `test` failed), 2 bad input, 3 refused (lock, missing file, no API key), 4 rollback failed.
@@ -90,7 +90,7 @@ Exit codes: 0 ok, 1 failed and rolled back (or `test` failed), 2 bad input, 3 re
 
 ## Environment overrides (tests and non-default layouts)
 
-`HLLM_ROOT` (prefix for every default path), `HLLM_COMPOSE_DIR` (`/opt/shared-memory/deployment`), `HLLM_SHARED_ENV` (`/root/private/shared-memory.env`, must hold `HINDSIGHT_API_KEY`), `HLLM_LLM_ENV` (`/root/private/hindsight-llm.env`), `HLLM_STATE_DIR` (`/var/lib/hindsight-llm`), `HLLM_LOCK` (`/var/lock/hindsight-llm.lock`), `HLLM_BACKUP_LOCK` (`/var/backups/memory/.mem-backup.lock`), `HLLM_LOG` (`/var/log/hindsight-llm.log`), `HLLM_DOCKER`, `HLLM_CURL` (command lines, split like a shell), `HLLM_API` (`http://127.0.0.1:8888`), `HLLM_BANK` (`alice-shared`), `HLLM_PROJECT` (`shared-memory-pilot`), `HLLM_CONTAINER` (`shared-memory-pilot-hindsight-1`), `HLLM_HEALTH_WAIT` (180 s), `HLLM_POLL` (3 s).
+`HLLM_ROOT` (prefix for every default path), `HLLM_COMPOSE_DIR` (`/opt/shared-memory/deployment`), `HLLM_SHARED_ENV` (`/root/private/shared-memory.env`, must hold `HINDSIGHT_API_KEY`), `HLLM_LLM_ENV` (`/root/private/hindsight-llm.env`), `HLLM_STATE_DIR` (`/var/lib/hindsight-llm`), `HLLM_LOCK` (`/var/lock/hindsight-llm.lock`), `HLLM_BACKUP_LOCK` (`/var/backups/memory/.mem-backup.lock`), `HLLM_LOG` (`/var/log/hindsight-llm.log`), `HLLM_DOCKER`, `HLLM_CURL` (command lines, split like a shell), `HLLM_API` (`http://127.0.0.1:8888`), `HLLM_BANK` (`default`), `HLLM_PROJECT` (`shared-memory-pilot`), `HLLM_CONTAINER` (`shared-memory-pilot-hindsight-1`), `HLLM_HEALTH_WAIT` (180 s), `HLLM_POLL` (3 s).
 
 ## Tests
 

@@ -1,4 +1,5 @@
 {
+  // Template: copy this file, then replace every placeholder (routes, KV id, vars) with your own values before `wrangler deploy`.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "cammut-edge-staging",
   "main": "src/index.ts",
@@ -7,18 +8,19 @@
   // URL-based client ids (CIMD), which stay off.
   "compatibility_flags": [],
   "workers_dev": false,
-  "routes": [{ "pattern": "mcp-staging.example", "custom_domain": true }],
-  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "REPLACE_WITH_KV_ID" }],
+  "routes": [{ "pattern": "mcp.example.com", "custom_domain": true }],
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "00000000000000000000000000000000" }],
   "vars": {
-    "PUBLIC_ORIGIN": "https://mcp-staging.example",
+    "PUBLIC_ORIGIN": "https://mcp.example.com",
     "EDGE_AUD": "cammut-staging",
     "EDGE_KID": "edge-1",
     "APPWRITE_ENDPOINT": "https://fra.cloud.appwrite.io/v1",
-    "APPWRITE_PROJECT_ID": "your-appwrite-project",
-    "ALLOWED_GITHUB_IDS": "12345",
+    "APPWRITE_PROJECT_ID": "your-appwrite-project-id",
+    "ALLOWED_GITHUB_IDS": "1234567",
     "ALLOWED_GOOGLE_EMAILS": "",
     "MCP_SERVERS": "github,hindsight,composio",
-    "ORIGIN_URL": "https://origin-staging.example"
+    "GITHUB_CLIENT_ID": "your-github-oauth-app-client-id",
+    "ORIGIN_URL": "https://origin.example.com"
   },
   "observability": { "enabled": false }
 }

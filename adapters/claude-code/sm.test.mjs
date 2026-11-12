@@ -169,12 +169,12 @@ test('isOptedOut honours the env switch and a marker file in any ancestor', () =
   assert.equal(isOptedOut(deep, { SHARED_MEMORY_BYPASS: '1' }), true);
   fs.writeFileSync(path.join(root, '.no-memory'), '');
   assert.equal(isOptedOut(deep, {}), true);
-  assert.equal(projectOf('C:/Users/alice/Documents/Cammut'), 'Cammut');
+  assert.equal(projectOf('C:/Users/you/Documents/Cammut'), 'Cammut');
 });
 
 const testCfg = (dir, hsUrl, ovUrl, over = {}) => ({
   stateDir: dir,
-  hs: { url: hsUrl, bank: 'alice-shared', key: 'hs-key', capture: true, recall: true },
+  hs: { url: hsUrl, bank: 'default', key: 'hs-key', capture: true, recall: true },
   ov: { url: ovUrl, key: 'ov-key', capture: false, recall: true, ...over.ov },
   requestMs: 2000,
 });
@@ -261,7 +261,7 @@ test('drain delivers to Hindsight only by default and never touches OpenViking s
   assert.equal(spoolFiles(cfg).length, 1);
   await drain(cfg);
   assert.equal(spoolFiles(cfg).length, 0);
-  const retain = hs.calls.find((c) => c.url === '/v1/default/banks/alice-shared/memories');
+  const retain = hs.calls.find((c) => c.url === '/v1/default/banks/default/memories');
   assert.equal(retain.auth, 'Bearer hs-key');
   assert.equal(retain.body.async, true);
   assert.equal(retain.body.items[0].document_id, 'cc-abcdef12-3456-0-0');

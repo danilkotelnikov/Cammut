@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Hindsight: stop keeping raw document text.
 //   verify        scratch-bank proof: does the bank override keep original_text and chunk_text out? (deletes the bank)
-//   apply --yes   set the override on the real bank (alice-shared) and show the resulting override keys
+//   apply --yes   set the override on the real bank (default) and show the resulting override keys
 // Prints statuses, booleans and lengths only, never document or fact text. Key: SHARED_MEMORY_HINDSIGHT_API_KEY (env).
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -88,14 +88,14 @@ export async function verify({ hs = defaultHs, say = console.log } = {}) {
 
 const COMPOSE_FIX = [
   'The bank override is not available on this server. Set it at server level instead:',
-  '  add to the hindsight: environment: block of /opt/cammut-memory/deployment/compose.4gb.yaml',
+  '  add to the hindsight: environment: block of /opt/shared-memory/deployment/compose.4gb.yaml',
   '    HINDSIGHT_API_STORE_DOCUMENT_TEXT: "false"',
   '    HINDSIGHT_API_RECALL_INCLUDE_CHUNKS: "false"',
-  '  then: cd /opt/cammut-memory/deployment && docker compose --env-file /etc/cammut/memory.env -f compose.yaml -f compose.4gb.yaml up -d hindsight',
+  '  then: cd /opt/shared-memory/deployment && docker compose --env-file /root/private/shared-memory.env -f compose.yaml -f compose.4gb.yaml up -d hindsight',
   '  and re-run: node adapters/tools/hs-no-text.mjs verify',
 ];
 
-export async function apply({ hs = defaultHs, yes = false, bank = 'alice-shared', say = console.log } = {}) {
+export async function apply({ hs = defaultHs, yes = false, bank = 'default', say = console.log } = {}) {
   if (!yes) { say(`refusing: this changes the config of bank ${bank}; run again with --yes`); return 1; }
   const { r: patch, form } = await patchConfig(hs, bank);
   say(`config_patch bank=${bank} status=${patch.status} form=${form}`);

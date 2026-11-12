@@ -13,7 +13,7 @@ import (
 )
 
 // Handler serves the discovery documents, /oauth/authorize and /oauth/token. issuer is the public origin, such as
-// https://app.example, with no trailing slash. /oauth/authorize needs no cookie: it only records the request and
+// https://app.example.com, with no trailing slash. /oauth/authorize needs no cookie: it only records the request and
 // sends the browser to the console, where the owner (signed in) answers it.
 func (s *Service) Handler(issuer string) http.Handler {
 	issuer = strings.TrimRight(issuer, "/")

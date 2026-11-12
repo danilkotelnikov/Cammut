@@ -36,7 +36,7 @@ func TestFTS5IsCompiledInAndFindsRussian(t *testing.T) {
 	if !strings.Contains(opts, "ENABLE_FTS5") {
 		t.Fatalf("FTS5 is not compiled into modernc.org/sqlite: %s", opts)
 	}
-	if err := s.UpsertProject("Cammut", "C:/Users/alice/Documents/Cammut"); err != nil {
+	if err := s.UpsertProject("Cammut", "C:/Users/you/Documents/Cammut"); err != nil {
 		t.Fatal(err)
 	}
 	n, err := s.AddNote(Note{Project: "Cammut", Kind: "howto", Title: "Запуск тестов на VDS", Body: "bash dev/gate.sh прогоняет gofmt, vet и go test -race", Tags: []string{"go", "vds"}, SourceAgent: "test"})
