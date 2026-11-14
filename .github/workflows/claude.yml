@@ -50,6 +50,13 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 1
+      - name: Enforce Macroscope $10 PR diff cap
+        if: github.event.issue.pull_request != null || github.event.pull_request != null
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          REPO_FULL: ${{ github.repository }}
+        run: node .github/scripts/pr-budget.mjs --pr "$PR_NUMBER" --repo "$REPO_FULL" --max-bytes 160000 --max-usd 10
       - uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}

@@ -17,7 +17,76 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  budget:
+    if: >-
+      !github.event.pull_request.draft
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Enforce Macroscope $10 PR diff cap
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO_FULL: ${{ github.repository }}
+        run: node .github/scripts/pr-budget.mjs --pr "$PR_NUMBER" --repo "$REPO_FULL" --max-bytes 160000 --max-usd 10
+
+  formal:
+    needs: budget
+    if: >-
+      needs.budget.result == 'success'
+      && !github.event.pull_request.draft
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Detect formal scope
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO_FULL: ${{ github.repository }}
+        run: |
+          CHANGED=$(gh pr diff "$PR_NUMBER" -R "$REPO_FULL" --name-only || true)
+          if printf '%s\n' "$CHANGED" | grep -Eq '(\.lean$|lean-toolchain$|lean-gate|train_r1\.py|shape_public\.py)'; then
+            echo "run_formal=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_formal=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Fable 5.2 surgical formal audit
+        if: steps.scope.outputs.run_formal == 'true' && secrets.ANTHROPIC_API_KEY != ''
+        uses: anthropics/claude-code-action@61a9c274fa7110a66dfafc1bbbced03833eb25fe # v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: >-
+            --model claude-fable-5-2
+            --effort max
+            --max-turns 4
+            --allowedTools Read,Grep,Glob
+          prompt: |
+            Perform a surgical read-only Lean formalization and invariant audit on the changed formal or reader training files in this PR.
+            Check for banned axioms (sorry, admit, native_decide, axiom, unsafe, implemented_by, extern) and subtle loss/sampling/privacy regressions.
+            Keep feedback concise and surgical.
+
   argon:
+    needs: budget
     # Secrets are not passed to forks, so a pull request from a fork gets no screen.
     if: >-
       vars.ARGON_REVIEW == 'on'
@@ -72,10 +141,11 @@ jobs:
           prompt: /pr-code-review ${{ github.event.pull_request.html_url }}
 
   claude:
-    needs: argon
+    needs: [budget, argon]
     if: >-
       always()
       && !cancelled()
+      && needs.budget.result == 'success'
       && !github.event.pull_request.draft
       && github.event.pull_request.head.repo.full_name == github.repository
       && github.event.pull_request.user.login != 'dependabot[bot]'
